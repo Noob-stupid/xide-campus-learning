@@ -14,7 +14,10 @@
     <svg class="seat-svg" id="navSvg" viewBox="0 0 960 620">
       <rect class="wall" x="20" y="20" width="920" height="580" rx="18"></rect>
       <path class="corridor" d="M56 335 H904 M480 335 V598"></path>
-      <g id="navZoneLabels"></g>
+      <text class="zone-label" x="90" y="72">A · 靠窗区</text>
+      <text class="zone-label" x="620" y="72">B · 安静区</text>
+      <text class="zone-label" x="90" y="398">C · 电源区</text>
+      <text class="zone-label" x="620" y="398">D · 讨论区</text>
       <circle class="entry" cx="480" cy="598" r="13"></circle>
       <text class="entry-text" x="480" y="602" text-anchor="middle">入口</text>
       <g id="navSeats"></g>
@@ -53,18 +56,6 @@
     const g = document.getElementById('navSeats');
     g.innerHTML = seats.map(s => '<circle cx="' + s.x + '" cy="' + s.y + '" r="4" fill="' + (s.id === seatId ? '#c98a2e' : '#cfd8e4') + '"></circle>').join('');
   }
-  function drawZoneLabels(seats) {
-    const g = document.getElementById('navZoneLabels'); g.innerHTML = '';
-    const seen = {};
-    (seats || []).forEach(s => {
-      if (seen[s.zone]) return; seen[s.zone] = true;
-      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      t.setAttribute('class', 'zone-label');
-      t.setAttribute('x', Math.max(30, s.x - 30)); t.setAttribute('y', Math.max(42, s.y - 28));
-      t.textContent = s.zone; g.appendChild(t);
-    });
-  }
-
   function drawPath(path) {
     const line = document.getElementById('navPath');
     line.setAttribute('points', path.map(p => p.x + ',' + p.y).join(' '));
@@ -74,6 +65,8 @@
   }
   async function load() {
     try {
+      const seatsRes = await ZX.api('/api/seats?floor_id=1');
+      drawSeats(seatsRes.seats);
       if (!seatId) {
         const cur = await ZX.api('/api/sessions/current');
         if (cur.session) seatId = cur.session.seat_id;
@@ -87,12 +80,8 @@
       const nav = await ZX.api('/api/nav?seat_id=' + seatId + '&from=entry');
       if (!nav.ok) { document.getElementById('navHint').textContent = nav.error || '路径规划失败'; return; }
       seat = nav.seat;
-      const seatsRes = await ZX.api('/api/seats?floor_id=' + seat.floor_id);
-      drawSeats(seatsRes.seats);
-      drawZoneLabels(seatsRes.seats);
       document.getElementById('navSeatCode').textContent = seat.code;
-      const _fl = nav.floor;
-      document.getElementById('navSeatZone').textContent = (_fl ? _fl.building + ' · ' + _fl.name + ' · ' : '') + seat.zone + ' · ' + seat.seat_type;
+      document.getElementById('navSeatZone').textContent = seat.zone + ' · ' + seat.seat_type;
       document.getElementById('navSeatBadge').textContent = '可到达';
       document.getElementById('navMinutes').textContent = nav.minutes + ' 分钟';
       document.getElementById('navMeters').textContent = nav.distance;
