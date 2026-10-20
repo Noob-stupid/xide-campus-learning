@@ -18,7 +18,7 @@
       <circle class="entry" cx="480" cy="598" r="13"></circle>
       <text class="entry-text" x="480" y="602" text-anchor="middle">入口</text>
       <g id="navSeats"></g>
-      <polyline id="navPath" fill="none" stroke="#00A1D6" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity="0"></polyline>
+      <polyline id="navPath" fill="none" stroke="#c98a2e" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity="0"></polyline>
       <g id="navNodes"></g>
     </svg>
   </section>
@@ -51,7 +51,7 @@
 
   function drawSeats(seats) {
     const g = document.getElementById('navSeats');
-    g.innerHTML = seats.map(s => '<circle cx="' + s.x + '" cy="' + s.y + '" r="4" fill="' + (s.id === seatId ? '#00A1D6' : '#cfd8e4') + '"></circle>').join('');
+    g.innerHTML = seats.map(s => '<circle cx="' + s.x + '" cy="' + s.y + '" r="4" fill="' + (s.id === seatId ? '#c98a2e' : '#cfd8e4') + '"></circle>').join('');
   }
   function drawZoneLabels(seats) {
     const g = document.getElementById('navZoneLabels'); g.innerHTML = '';
@@ -70,7 +70,7 @@
     line.setAttribute('points', path.map(p => p.x + ',' + p.y).join(' '));
     line.setAttribute('opacity', '1');
     document.getElementById('navNodes').innerHTML = path.map((p, i) =>
-      '<circle cx="' + p.x + '" cy="' + p.y + '" r="' + (i === path.length - 1 ? 9 : 5) + '" fill="' + (i === path.length - 1 ? '#00A1D6' : '#ffffff') + '" stroke="#00A1D6" stroke-width="2"></circle>').join('');
+      '<circle cx="' + p.x + '" cy="' + p.y + '" r="' + (i === path.length - 1 ? 9 : 5) + '" fill="' + (i === path.length - 1 ? '#0f2a4a' : '#ffffff') + '" stroke="#c98a2e" stroke-width="2"></circle>').join('');
   }
   async function load() {
     try {

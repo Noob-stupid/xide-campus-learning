@@ -65,7 +65,7 @@
             <button type="button" class="chip" data-min="60">1 小时</button>
             <button type="button" class="chip active" data-min="120">2 小时</button>
             <button type="button" class="chip" data-min="180">3 小时</button>
-            <button type="button" class="chip" data-min="1" style="color:#D5496E;border-color:#F7B8CC">1 分钟演示</button>
+            <button type="button" class="chip" data-min="1" style="color:#98621a;border-color:#e8c98f">1 分钟演示</button>
           </div>
           <button class="btn primary block" type="submit" id="bookBtn">确认预约</button>
           <div class="small muted">预约成功后自动生成导航；结束或到期后触发接棒。</div>
@@ -168,7 +168,7 @@
       document.getElementById('seatDetail').innerHTML = '<div class="empty"><div class="empty-icon">🪑</div><b>点一个座位</b><span>在左侧地图上选择，或让系统推荐。</span></div>';
       document.getElementById('bookCard').style.display = 'none';
       const fl = floors.find(f => f.id === fid);
-      if (fl) { document.getElementById('floorLabel').textContent = fl.building + ' · ' + fl.name; const ph = document.querySelector('.page-head h1'); if (ph) ph.textContent = fl.building + ' · ' + fl.name; }
+      if (fl) { document.getElementById('floorLabel').textContent = fl.building + ' · ' + fl.name; const ph = document.querySelector('.topbar-title h1'); if (ph) ph.textContent = fl.building + ' · ' + fl.name; }
     } catch (e) { ZX.toast(e.message, 'err'); }
   }
 
