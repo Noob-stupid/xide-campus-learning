@@ -7,6 +7,13 @@
 <div class="seat-layout">
   <section class="card floor-card">
     <div class="floor-toolbar">
+      <div class="floor-switch">
+        <span class="step-num">1</span><b>选择地点</b>
+        <select class="input" id="buildingSelect"></select>
+        <div class="chips" id="floorTabs"></div>
+        <span class="badge blue" id="floorLabel">—</span>
+      </div>
+      <div class="seat-step-title"><span class="step-num">2</span><b>选择座位</b><span class="small muted">先选地点，再点座位预约</span></div>
       <div class="chips" id="seatFilters">
         <button class="chip active" data-f="all">全部</button>
         <button class="chip" data-f="window">靠窗</button>
@@ -24,10 +31,7 @@
     <svg class="seat-svg" id="seatSvg" viewBox="0 0 960 620" role="img" aria-label="图书馆二楼座位地图">
       <rect class="wall" x="20" y="20" width="920" height="580" rx="18"></rect>
       <path class="corridor" d="M56 335 H904 M480 335 V598"></path>
-      <text class="zone-label" x="90" y="72">A · 靠窗区</text>
-      <text class="zone-label" x="620" y="72">B · 安静区</text>
-      <text class="zone-label" x="90" y="398">C · 电源区</text>
-      <text class="zone-label" x="620" y="398">D · 讨论区</text>
+      <g id="zoneLabels"></g>
       <circle class="entry" cx="480" cy="598" r="13"></circle>
       <text class="entry-text" x="480" y="602" text-anchor="middle">入口</text>
     </svg>
@@ -85,11 +89,24 @@
 {% endblock %}
 {% block scripts %}
 <script>
-  let allSeats = [], selected = null, filter = 'all';
+  let allSeats = [], selected = null, filter = 'all', floors = [], currentFloor = null;
   const svg = document.getElementById('seatSvg');
   const statusClass = s => s.live_status || 'free';
 
+  function drawZoneLabels() {
+    const g = document.getElementById('zoneLabels'); g.innerHTML = '';
+    const seen = {};
+    allSeats.forEach(s => {
+      if (seen[s.zone]) return; seen[s.zone] = true;
+      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      t.setAttribute('class', 'zone-label');
+      t.setAttribute('x', Math.max(30, s.x - 30)); t.setAttribute('y', Math.max(42, s.y - 28));
+      t.textContent = s.zone; g.appendChild(t);
+    });
+  }
+
   function draw() {
+    drawZoneLabels();
     svg.querySelectorAll('.seat').forEach(n => n.remove());
     allSeats.forEach(s => {
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -145,13 +162,39 @@
     ZX.toast('推荐 ' + free[0].code + '：靠窗/安静/电源综合最优');
   }
 
-  async function load() {
+  async function loadSeats(fid) {
+    currentFloor = fid;
     try {
-      const r = await ZX.api('/api/seats?floor_id=1');
-      allSeats = r.seats;
-      draw();
-      if (selected) { const s = allSeats.find(x => x.id === selected.id); if (s) selectSeat(s); }
+      const r = await ZX.api('/api/seats?floor_id=' + fid);
+      allSeats = r.seats || []; selected = null; draw();
+      document.getElementById('seatDetail').innerHTML = '<div class="empty"><div class="empty-icon">🪑</div><b>点一个座位</b><span>在左侧地图上选择，或让系统推荐。</span></div>';
+      document.getElementById('bookCard').style.display = 'none';
+      const fl = floors.find(f => f.id === fid);
+      if (fl) { document.getElementById('floorLabel').textContent = fl.building + ' · ' + fl.name; const ph = document.querySelector('.topbar-title h1'); if (ph) ph.textContent = fl.building + ' · ' + fl.name; }
     } catch (e) { ZX.toast(e.message, 'err'); }
+  }
+
+  async function loadFloors() {
+    try {
+      const r = await ZX.api('/api/floors');
+      floors = r.floors || [];
+      const sel = document.getElementById('buildingSelect');
+      const buildings = [...new Set(floors.map(f => f.building))];
+      sel.innerHTML = buildings.map(b => '<option>' + ZX.escapeHtml(b) + '</option>').join('');
+      sel.onchange = () => renderFloorTabs(sel.value);
+      renderFloorTabs(buildings[0]);
+    } catch (e) { ZX.toast(e.message, 'err'); }
+  }
+
+  function renderFloorTabs(building) {
+    const list = floors.filter(f => f.building === building);
+    const box = document.getElementById('floorTabs');
+    box.innerHTML = list.map((f, i) => '<button class="chip ' + (i === 0 ? 'active' : '') + '" data-fid="' + f.id + '">' + ZX.escapeHtml(f.name) + '</button>').join('');
+    box.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+      box.querySelectorAll('button').forEach(x => x.classList.remove('active')); b.classList.add('active');
+      loadSeats(Number(b.dataset.fid));
+    }));
+    if (list.length) loadSeats(list[0].id);
   }
 
   document.querySelectorAll('#seatFilters .chip').forEach(b => b.addEventListener('click', () => {
@@ -184,12 +227,12 @@
     const sim = async (occupied) => {
       const code = document.getElementById('simSeat').value.trim();
       if (!code) return ZX.toast('先填座位号', 'err');
-      try { await ZX.api('/api/devices/simulate', { method: 'POST', body: { seat_code: code, occupied } }); ZX.toast(code + (occupied ? ' 已上报有人' : ' 已上报无人')); load(); }
+      try { await ZX.api('/api/devices/simulate', { method: 'POST', body: { seat_code: code, occupied } }); ZX.toast(code + (occupied ? ' 已上报有人' : ' 已上报无人')); loadSeats(currentFloor); }
       catch (e) { ZX.toast(e.message, 'err'); }
     };
     simOn.addEventListener('click', () => sim(true));
     document.getElementById('simOff').addEventListener('click', () => sim(false));
   }
-  load();
+  loadFloors();
 </script>
 {% endblock %}

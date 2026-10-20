@@ -435,3 +435,12 @@ textarea.input{min-height:84px;resize:vertical}
   .assistant-fab{right:14px;bottom:78px}
   .assistant-panel{right:10px;bottom:130px;height:calc(100vh - 160px)}
 }
+
+/* 选座：先选地点，再选座位 */
+.floor-switch{display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%;margin-bottom:4px}
+.floor-switch .input{height:34px;border-radius:9px;font-size:12.5px;padding:0 10px;border:1px solid var(--line);background:#fff;width:150px}
+.step-num{width:20px;height:20px;border-radius:50%;background:var(--ink);color:#fff;display:inline-grid;place-items:center;font-size:11px;font-weight:700;flex:0 0 auto}
+.seat-step-title{display:flex;align-items:center;gap:8px;width:100%;padding:6px 0 2px;font-size:13px;color:var(--ink)}
+.seat-step-title .small{margin-left:2px}
+#floorTabs .chip{padding:6px 12px;font-size:12px}
+#floorTabs .chip.active{background:var(--ink);border-color:var(--ink);color:#fff}
