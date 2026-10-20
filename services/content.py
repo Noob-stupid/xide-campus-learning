@@ -124,6 +124,8 @@ FONT_CANDIDATES = (
     'C:/Windows/Fonts/simhei.ttf',
     'C:/Windows/Fonts/simsun.ttc',
     '/System/Library/Fonts/PingFang.ttc',
+    '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+    '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc',
 )
 
 
