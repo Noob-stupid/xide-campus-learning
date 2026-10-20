@@ -68,7 +68,7 @@ python app.py               # http://127.0.0.1:5820
 |---|---|---|
 | ![学习](docs/screenshots/06-learn.png) | ![接力池](docs/screenshots/07-pool.png) | ![导航](docs/screenshots/08-nav-3f.png) |
 
-> 完整介绍见 [docs/项目详细介绍.md](docs/项目详细介绍.md)。
+> 完整介绍见 [docs/项目详细介绍.md](docs/项目详细介绍.md)；Word 版：[docs/习得-项目详细介绍.docx](docs/习得-项目详细介绍.docx)。
 
 ## 架构
 
