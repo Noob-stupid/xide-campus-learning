@@ -22,6 +22,7 @@ app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
 NAV = [
     ('home', '今日', '/', 'home'),
     ('seats', '空间', '/seats', 'seat'),
+    ('nav', '导航', '/nav', 'pin'),
     ('learn', '学习', '/learn', 'book'),
     ('pool', '接力池', '/pool', 'play'),
     ('upload', '交棒', '/upload', 'upload'),
@@ -31,10 +32,10 @@ NAV = [
 ]
 
 ROLE_NAV = {
-    'student': ['home', 'seats', 'learn', 'pool', 'upload', 'profile'],
-    'teacher': ['home', 'seats', 'learn', 'pool', 'upload', 'profile'],
-    'reviewer': ['home', 'review', 'pool', 'workflow', 'profile'],
-    'admin': ['home', 'seats', 'review', 'workflow', 'pool', 'profile'],
+    'student': ['home', 'seats', 'nav', 'learn', 'pool', 'upload', 'profile'],
+    'teacher': ['home', 'seats', 'nav', 'learn', 'pool', 'upload', 'profile'],
+    'reviewer': ['home', 'nav', 'review', 'pool', 'workflow', 'profile'],
+    'admin': ['home', 'seats', 'nav', 'review', 'workflow', 'pool', 'profile'],
 }
 
 

@@ -135,7 +135,7 @@
     document.getElementById('seatDetail').innerHTML =
       '<div class="row between"><div><div class="seat-code">' + ZX.escapeHtml(s.code) + '</div><div class="seat-zone">' + ZX.escapeHtml(s.zone) + ' · ' + ZX.escapeHtml(s.seat_type) + '</div></div><span class="badge ' + (s.live_status === 'free' ? 'green' : 'amber') + '">' + (s.live_status === 'free' ? '可预约' : '暂不可约') + '</span></div>' +
       '<div class="feature-list">' + feats.map(f => '<span class="tag">' + f + '</span>').join('') + '</div>' +
-      (s.reservation ? '<div class="ai-panel">已被 ' + ZX.escapeHtml(s.reservation.user_name || '同学') + ' 预约：' + ZX.fmtDate(s.reservation.start_at) + ' — ' + ZX.fmtDate(s.reservation.end_at) + '</div>' : '<div class="small muted">点击下方按钮预约；预约后可在导航页查看路径。</div>');
+      (s.reservation ? '<div class="ai-panel">已被 ' + ZX.escapeHtml(s.reservation.user_name || '同学') + ' 预约：' + ZX.fmtDate(s.reservation.start_at) + ' — ' + ZX.fmtDate(s.reservation.end_at) + '</div>' : '<div class="row" style="margin-top:12px"><a class="btn soft sm" href="/nav?seat_id=' + s.id + '">查看导航</a></div><div class="small muted">点击下方按钮预约；预约后可在导航页查看路径。</div>');
     document.getElementById('bookCard').style.display = s.live_status === 'free' ? 'block' : 'none';
     document.getElementById('bookSeatCode').textContent = s.code;
     if (s.live_status === 'free') setDefaultTimes(120);
