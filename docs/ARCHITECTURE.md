@@ -126,3 +126,7 @@ flow.get_run(run_id) / flow.list_runs() / flow.flow_defs()
 - `db.py` 可替换为 RDS MySQL 适配器（`docs/HUAWEI-CLOUD.md`）
 - `flow.py` 的 node 类型可对接 AgentArts 工作流节点
 - `devices.py` 可接真实 ESP32 固件
+
+## 11. 关于 services/workflow.py
+
+`services/workflow.py` 是对端提供的同契约参考实现，用于后续对接 AgentArts 工作流节点时做对照；当前 Web 应用实际运行使用 `services/flow.py`。两者接口一致（start/step/finish/get_run/list_runs/flow_defs），不要同时改两套。
