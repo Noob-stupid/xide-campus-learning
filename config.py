@@ -34,3 +34,7 @@ LLM_TIMEOUT = int(os.environ.get("ZX_LLM_TIMEOUT", "20"))
 
 for _d in (DATA_DIR, MEDIA_DIR, UPLOAD_DIR):
     os.makedirs(_d, exist_ok=True)
+
+# 室外导航（可选）：配置高德 JS Key 后可在页面上显示高德地图/路线；不配置则用相对方向示意图。
+AMAP_JS_KEY = os.environ.get('AMAP_JS_KEY', '')
+AMAP_SECURITY_CODE = os.environ.get('AMAP_SECURITY_CODE', '')

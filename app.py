@@ -12,8 +12,8 @@ from flask import (Flask, abort, jsonify, redirect, render_template, request,
 
 import db
 import seed
-from config import (HOST, MAX_FRAMES, MEDIA_DIR, PORT, SECRET_KEY, UPLOAD_DIR)
-from services import devices, flow, navigation, relay, seats
+from config import (AMAP_JS_KEY, AMAP_SECURITY_CODE, HOST, MAX_FRAMES, MEDIA_DIR, PORT, SECRET_KEY, UPLOAD_DIR)
+from services import devices, flow, navigation, outdoor, relay, seats
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.secret_key = SECRET_KEY
@@ -590,7 +590,9 @@ def api_messages_read():
 @app.route('/api/profile')
 @login_required
 def api_profile():
-    u = current_user()
+    u = dict(current_user())
+    u['avatar_url'] = media_url(u.get('avatar'))
+    u['cover_url'] = media_url(u.get('cover'))
     sessions = [dict(x) for x in db.query(
         'SELECT ss.*, s.code AS seat_code, s.zone FROM study_sessions ss JOIN seats s ON s.id=ss.seat_id '
         'WHERE ss.user_id=? ORDER BY ss.id DESC LIMIT 50', (u['id'],))]
@@ -612,10 +614,80 @@ def api_profile():
 def api_profile_update():
     u = current_user()
     d = request.get_json(silent=True) or {}
-    db.execute('UPDATE users SET signature=?, college=?, interests=? WHERE id=?',
-               (d.get('signature', u.get('signature', '')), d.get('college', u.get('college', '')),
+    name = (d.get('name') or u.get('name') or '').strip()
+    if not name:
+        return jsonify({'ok': False, 'error': '昵称不能为空'}), 400
+    if len(name) > 40:
+        return jsonify({'ok': False, 'error': '昵称最多 40 个字'}), 400
+    db.execute('UPDATE users SET name=?, signature=?, college=?, interests=? WHERE id=?',
+               (name, d.get('signature', u.get('signature', '')), d.get('college', u.get('college', '')),
                 d.get('interests', u.get('interests', '')), u['id']))
     return jsonify({'ok': True})
+
+
+@app.route('/api/profile/upload', methods=['POST'])
+@login_required
+def api_profile_upload():
+    u = current_user()
+    kind = (request.form.get('kind') or 'avatar').strip()
+    if kind not in ('avatar', 'cover'):
+        return jsonify({'ok': False, 'error': 'kind 必须是 avatar 或 cover'}), 400
+    f = request.files.get('file')
+    if not f or not f.filename:
+        return jsonify({'ok': False, 'error': '请选择图片'}), 400
+    ext = os.path.splitext(f.filename)[1].lower()
+    if ext not in ('.jpg', '.jpeg', '.png', '.webp', '.gif'):
+        return jsonify({'ok': False, 'error': '仅支持 jpg / png / webp / gif'}), 400
+    if request.content_length and request.content_length > 8 * 1024 * 1024:
+        return jsonify({'ok': False, 'error': '图片不能超过 8MB'}), 400
+    folder = os.path.join(MEDIA_DIR, 'profiles')
+    os.makedirs(folder, exist_ok=True)
+    name = '%s_%s_%s%s' % (u['id'], kind, uuid.uuid4().hex[:8], ext)
+    path = os.path.join(folder, name)
+    f.save(path)
+    try:
+        from PIL import Image
+        Image.open(path).verify()
+    except Exception:
+        try:
+            os.remove(path)
+        except Exception:
+            pass
+        return jsonify({'ok': False, 'error': '文件不是有效图片'}), 400
+    rel = 'profiles/' + name
+    col = 'avatar' if kind == 'avatar' else 'cover'
+    db.execute('UPDATE users SET %s=? WHERE id=?' % col, (rel, u['id']))
+    return jsonify({'ok': True, 'kind': kind, 'url': media_url(rel)})
+
+
+@app.route('/outdoor')
+@login_required
+def outdoor_page():
+    return render_template('outdoor.html', amap_key=AMAP_JS_KEY, amap_security=AMAP_SECURITY_CODE)
+
+
+@app.route('/api/outdoor')
+@login_required
+def api_outdoor():
+    name = (request.args.get('building') or '').strip()
+    b = db.one('SELECT * FROM buildings WHERE name=?', (name,)) if name else None
+    if not b:
+        b = db.one('SELECT * FROM buildings ORDER BY id LIMIT 1')
+    if not b:
+        return jsonify({'ok': False, 'error': '还没有建筑数据，请先运行 seed'}), 404
+    lat = request.args.get('lat', type=float)
+    lng = request.args.get('lng', type=float)
+    source = 'browser'
+    if lat is None or lng is None:
+        lat, lng, source = 38.3018, 116.8360, 'demo'
+    info = outdoor.walk_route(lat, lng, dict(b))
+    info.update({
+        'ok': True,
+        'buildings': [dict(x) for x in db.query('SELECT * FROM buildings ORDER BY id')],
+        'start': {'lat': lat, 'lng': lng, 'source': source},
+        'amap_configured': bool(AMAP_JS_KEY),
+    })
+    return jsonify(info)
 
 
 # ---------------- workflow / stats ----------------

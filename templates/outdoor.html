@@ -1,0 +1,125 @@
+{% extends 'base.html' %}
+{% from 'base.html' import icon %}
+{% block title %}室外导航{% endblock %}
+{% block page_title %}室外导航 · 到馆路线{% endblock %}
+{% block eyebrow %}从校门到图书馆，再从馆内到座位{% endblock %}
+{% block content %}
+<div class="nav-layout">
+  <section class="card floor-card">
+    <div class="floor-toolbar">
+      <span class="badge blue">室外步行</span>
+      <select class="input" id="buildingSel" style="width:170px"></select>
+      <button class="btn soft sm" id="locBtn">{{ icon('pin') }} 使用我的位置</button>
+      <a class="btn ghost sm" href="/nav" style="margin-left:auto">室内导航</a>
+    </div>
+    <div class="outdoor-wrap">
+      <svg class="outdoor-svg" id="outdoorSvg" viewBox="0 0 960 620" role="img" aria-label="室外到馆方向图">
+        <defs>
+          <pattern id="outGrid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M40 0H0V40" fill="none" stroke="#e7edf4" stroke-width="1"></path>
+          </pattern>
+        </defs>
+        <rect x="0" y="0" width="960" height="620" fill="#f8fafc"></rect>
+        <rect x="0" y="0" width="960" height="620" fill="url(#outGrid)"></rect>
+        <circle cx="480" cy="360" r="80" fill="none" stroke="#dbe5ef" stroke-dasharray="4 7"></circle>
+        <circle cx="480" cy="360" r="160" fill="none" stroke="#dbe5ef" stroke-dasharray="4 7"></circle>
+        <circle cx="480" cy="360" r="240" fill="none" stroke="#dbe5ef" stroke-dasharray="4 7"></circle>
+        <text x="480" y="34" text-anchor="middle" class="outdoor-muted">校园步行示意图 · 非精确地图</text>
+        <g transform="translate(900 54)">
+          <circle r="24" fill="#fff" stroke="#dbe5ef"></circle>
+          <path d="M0 -14 L7 9 L0 4 L-7 9 Z" fill="#c98a2e"></path>
+          <text x="0" y="-30" text-anchor="middle" class="outdoor-muted">北</text>
+        </g>
+        <path id="outPath" class="outdoor-path" d="M480 560 L480 360"></path>
+        <circle id="outStart" class="outdoor-start" cx="480" cy="560" r="11"></circle>
+        <text x="480" y="588" text-anchor="middle" class="outdoor-muted">当前位置 / 校门</text>
+        <circle id="outEnd" class="outdoor-end" cx="480" cy="360" r="13"></circle>
+        <text id="outEndLabel" x="480" y="336" text-anchor="middle" class="outdoor-label">目的地</text>
+        <text id="outDirection" x="480" y="520" text-anchor="middle" class="outdoor-muted">—</text>
+      </svg>
+    </div>
+  </section>
+
+  <aside class="stack">
+    <section class="card">
+      <div class="card-head"><h3>到馆路线</h3><span class="badge green" id="destBadge">室外</span></div>
+      <div class="card-body">
+        <div class="seat-code" id="destName">—</div>
+        <div class="small muted" id="destAddr">—</div>
+        <div class="nav-meta">
+          <div><b id="outDist">—</b><small>米</small></div>
+          <div><b id="outMins">—</b><small>分钟</small></div>
+          <div><b id="outDir">—</b><small>方向</small></div>
+        </div>
+        <div class="nav-steps" id="outSteps"></div>
+        <div class="divider"></div>
+        <a class="btn primary block" id="amapLink" target="_blank" rel="noopener">在高德地图中打开</a>
+        <div class="small muted" id="startSource" style="margin-top:8px">正在定位…</div>
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h3>说明</h3></div>
+      <div class="card-body small muted">
+        室外路线只负责“到馆”；进馆后在 <a href="/nav">室内导航</a> 页选择楼层与座位，继续 A* 室内路线。
+        未配置高德 Key 时显示相对方向示意图；配置后可跳转高德步行路线。
+      </div>
+    </section>
+  </aside>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const AMAP_KEY = {{ (amap_key or '')|tojson }};
+  let current = null;
+  const sel = document.getElementById('buildingSel');
+
+  function render(d) {
+    current = d;
+    const b = d.building;
+    document.getElementById('destName').textContent = b.name;
+    document.getElementById('destAddr').textContent = b.address || '校园内';
+    document.getElementById('outDist').textContent = d.distance_m;
+    document.getElementById('outMins').textContent = d.minutes;
+    document.getElementById('outDir').textContent = d.direction;
+    document.getElementById('outSteps').innerHTML = d.steps.map((s, i) => '<div class="nav-step"><span class="n">' + (i + 1) + '</span><span class="t">' + ZX.escapeHtml(s) + '</span></div>').join('');
+    document.getElementById('amapLink').href = d.amap_uri;
+    document.getElementById('startSource').textContent = d.start.source === 'browser' ? '已使用当前定位' : '未获取定位，使用校门演示坐标';
+    const r = Math.min(235, 85 + d.distance_m * 0.16);
+    const rad = d.bearing * Math.PI / 180;
+    const cx = 480, cy = 360;
+    const ex = cx + Math.sin(rad) * r, ey = cy - Math.cos(rad) * r;
+    document.getElementById('outPath').setAttribute('d', 'M480 560 L' + ex.toFixed(1) + ' ' + ey.toFixed(1));
+    const end = document.getElementById('outEnd'); end.setAttribute('cx', ex); end.setAttribute('cy', ey);
+    const label = document.getElementById('outEndLabel'); label.setAttribute('x', ex); label.setAttribute('y', Math.max(24, ey - 18)); label.textContent = b.name;
+    document.getElementById('outDirection').textContent = '向' + d.direction + '步行约 ' + d.distance_m + ' 米';
+  }
+
+  async function loadRoute(lat, lng) {
+    try {
+      let url = '/api/outdoor?building=' + encodeURIComponent(sel.value || '');
+      if (lat != null && lng != null) url += '&lat=' + lat + '&lng=' + lng;
+      const d = await ZX.api(url);
+      if (!d.buildings || !sel.options.length) {
+        sel.innerHTML = (d.buildings || []).map(b => '<option>' + ZX.escapeHtml(b.name) + '</option>').join('');
+      }
+      render(d);
+    } catch (e) { ZX.toast(e.message, 'err'); }
+  }
+
+  sel.addEventListener('change', () => loadRoute());
+  document.getElementById('locBtn').addEventListener('click', () => {
+    if (!navigator.geolocation) { ZX.toast('当前浏览器不支持定位，使用校门演示坐标'); return; }
+    navigator.geolocation.getCurrentPosition(
+      p => { ZX.toast('已获取当前位置'); loadRoute(p.coords.latitude, p.coords.longitude); },
+      () => { ZX.toast('未获取定位，使用校门演示坐标'); loadRoute(); },
+      { timeout: 6000, maximumAge: 60000 }
+    );
+  });
+  loadRoute().then(() => {
+    // 首次进入时用接口返回的建筑列表填充下拉
+    if (!sel.options.length && current && current.buildings) {
+      sel.innerHTML = current.buildings.map(b => '<option>' + ZX.escapeHtml(b.name) + '</option>').join('');
+    }
+  });
+</script>
+{% endblock %}

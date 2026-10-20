@@ -53,7 +53,7 @@
         <span>结束自习后，接力池会给你下一条视频。</span>
       </div>
       <a class="side-user" href="{{ url_for('profile_page') }}">
-        <span class="avatar sm">{{ user.name[:1] }}</span>
+        {% if user.avatar %}<img class="avatar sm" src="{{ user.avatar|media }}" alt="">{% else %}<span class="avatar sm">{{ user.name[:1] }}</span>{% endif %}
         <span><b>{{ user.name }}</b><small>{{ {'student':'学生','teacher':'教师','reviewer':'审核员','admin':'管理员'}.get(user.role, user.role) }}</small></span>
       </a>
     </div>
@@ -69,7 +69,7 @@
           {{ icon('bell') }}{% if unread %}<i class="dot">{{ unread }}</i>{% endif %}
         </a>
         <a class="user-chip" href="{{ url_for('profile_page') }}">
-          <span class="avatar xs">{{ user.name[:1] }}</span>
+          {% if user.avatar %}<img class="avatar xs" src="{{ user.avatar|media }}" alt="">{% else %}<span class="avatar xs">{{ user.name[:1] }}</span>{% endif %}
           <span>{{ user.name }}</span>
         </a>
       </div>

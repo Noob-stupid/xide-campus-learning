@@ -4,16 +4,18 @@
 {% block page_title %}我的学习档案{% endblock %}
 {% block eyebrow %}不是社交主页，是你的学习档案{% endblock %}
 {% block content %}
-<div class="profile-cover">
+<div class="profile-cover" id="profileCover">
   <div class="cover-note">LEARNING ARCHIVE · 2026</div>
+  <button class="btn ghost sm" id="coverBtn" style="position:absolute;right:16px;bottom:14px;z-index:2">更换封面</button>
 </div>
 <div class="profile-head">
-  <div class="avatar lg" id="avatar">{{ user.name[:1] }}</div>
+  <div class="avatar lg" id="avatar" title="点击更换头像" style="cursor:pointer;overflow:hidden">{{ user.name[:1] }}</div>
   <div class="profile-id">
     <div class="row" style="gap:10px;flex-wrap:wrap"><h2 id="pName">{{ user.name }}</h2><span class="badge blue" id="pRole">学生</span></div>
     <div class="meta" id="pMeta">{{ user.college }}</div>
     <div class="sig" id="pSig">{{ user.signature }}</div>
     <div class="profile-tags" id="pTags"></div>
+    <div class="small muted" style="margin-top:6px">点击头像或封面可更换图片</div>
   </div>
   <div class="row" style="padding-bottom:10px;flex-wrap:wrap">
     <button class="btn ghost sm" id="editBtn">{{ icon('user') }} 编辑资料</button>
@@ -21,6 +23,8 @@
   </div>
 </div>
 
+<input type="file" id="avatarFile" accept="image/*" hidden>
+<input type="file" id="coverFile" accept="image/*" hidden>
 <div class="profile-stats" id="pStats">
   <div class="ps"><b id="psSessions">—</b><small>学习场次</small></div>
   <div class="ps"><b id="psMinutes">—</b><small>专注时长</small></div>
@@ -73,7 +77,10 @@
     document.getElementById('pRole').textContent = roleName(u.role);
     document.getElementById('pMeta').textContent = u.college || '未填写学院';
     document.getElementById('pSig').textContent = u.signature || '写一句你的学习签名。';
-    document.getElementById('avatar').textContent = (u.name || '?')[0];
+    const _av = document.getElementById('avatar');
+    if (u.avatar_url) _av.innerHTML = '<img src="' + u.avatar_url + '" alt="">'; else _av.textContent = (u.name || '?')[0];
+    const _cv = document.getElementById('profileCover');
+    if (u.cover_url) _cv.style.backgroundImage = 'linear-gradient(180deg, rgba(15,42,74,.12), rgba(15,42,74,.55)), url("' + u.cover_url + '")'; else _cv.style.backgroundImage = '';
     document.getElementById('psSessions').textContent = st.sessions;
     document.getElementById('psMinutes').textContent = Math.round(st.minutes / 60) + 'h';
     document.getElementById('psContents').textContent = st.contents;
@@ -126,9 +133,21 @@
   }));
   document.getElementById('editBtn').addEventListener('click', () => {
     if (!P) return;
-    ZX.openModal('<div class="modal-head"><h3>编辑学习档案</h3><button class="icon-btn" data-close>✕</button></div><div class="modal-body"><div class="form"><div class="field"><label>学院</label><input class="input" id="eCollege" value="' + ZX.escapeHtml(P.user.college || '') + '"></div><div class="field"><label>学习签名</label><input class="input" id="eSig" value="' + ZX.escapeHtml(P.user.signature || '') + '"></div><div class="field"><label>兴趣方向（逗号分隔）</label><input class="input" id="eInt" value="' + ZX.escapeHtml(P.user.interests || '') + '"></div><button class="btn primary" id="saveProfile">保存</button></div></div>');
+    const _name = ZX.escapeHtml(P.user.name || '');
+    const _college = ZX.escapeHtml(P.user.college || '');
+    const _sig = ZX.escapeHtml(P.user.signature || '');
+    const _int = ZX.escapeHtml(P.user.interests || '');
+    ZX.openModal(
+      '<div class="modal-head"><h3>编辑学习档案</h3><button class="icon-btn" data-close>✕</button></div>' +
+      '<div class="modal-body"><div class="form">' +
+      '<div class="field"><label>昵称</label><input class="input" id="eName" value="' + _name + '"></div>' +
+      '<div class="field"><label>学院</label><input class="input" id="eCollege" value="' + _college + '"></div>' +
+      '<div class="field"><label>学习签名</label><input class="input" id="eSig" value="' + _sig + '"></div>' +
+      '<div class="field"><label>兴趣方向（逗号分隔）</label><input class="input" id="eInt" value="' + _int + '"></div>' +
+      '<button class="btn primary" id="saveProfile">保存</button></div></div>'
+    );
     document.getElementById('saveProfile').addEventListener('click', async () => {
-      try { await ZX.api('/api/profile/update', { method: 'POST', body: { college: document.getElementById('eCollege').value, signature: document.getElementById('eSig').value, interests: document.getElementById('eInt').value } }); ZX.closeModal(); ZX.toast('已保存'); load(); }
+      try { await ZX.api('/api/profile/update', { method: 'POST', body: { name: document.getElementById('eName').value, college: document.getElementById('eCollege').value, signature: document.getElementById('eSig').value, interests: document.getElementById('eInt').value } }); ZX.closeModal(); ZX.toast('已保存'); load(); }
       catch (e) { ZX.toast(e.message, 'err'); }
     });
   });
@@ -137,6 +156,24 @@
     const st = P.stats;
     ZX.openModal('<div class="modal-head"><h3>学习名片</h3><button class="icon-btn" data-close>✕</button></div><div class="modal-body"><div style="background:linear-gradient(135deg,#0f2a4a,#24547f);color:#fff;border-radius:18px;padding:26px;position:relative;overflow:hidden"><div style="font-size:11px;letter-spacing:.16em;color:#e8c98f">习得 · 学习名片</div><div style="font-size:24px;font-weight:700;margin:8px 0 2px">' + ZX.escapeHtml(P.user.name) + '</div><div style="color:#c6d6e8;font-size:12px">' + ZX.escapeHtml(P.user.college || '') + '</div><div style="display:flex;gap:22px;margin-top:18px"><div><b style="font-size:22px">' + Math.round(st.minutes / 60) + 'h</b><div style="font-size:11px;color:#c6d6e8">本周专注</div></div><div><b style="font-size:22px">' + st.sessions + '</b><div style="font-size:11px;color:#c6d6e8">学习场次</div></div><div><b style="font-size:22px">' + st.contents + '</b><div style="font-size:11px;color:#c6d6e8">交棒</div></div><div><b style="font-size:22px">' + st.helpful_rate + '%</b><div style="font-size:11px;color:#c6d6e8">有帮助率</div></div></div><div style="margin-top:18px;font-size:12px;color:#c6d6e8">' + ZX.escapeHtml(P.user.signature || '把每一次自习，变成下一次的底气。') + '</div></div><div class="small muted" style="margin-top:12px">截图保存即可分享；不含任何社交指标。</div></div>');
   });
+  async function uploadProfile(kind, input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('kind', kind);
+    fd.append('file', file);
+    try {
+      await ZX.api('/api/profile/upload', { method: 'POST', body: fd });
+      ZX.toast(kind === 'avatar' ? '头像已更新' : '封面已更新');
+      load();
+    } catch (e) { ZX.toast(e.message, 'err'); }
+    input.value = '';
+  }
+  document.getElementById('avatar').addEventListener('click', () => document.getElementById('avatarFile').click());
+  document.getElementById('coverBtn').addEventListener('click', () => document.getElementById('coverFile').click());
+  document.getElementById('avatarFile').addEventListener('change', e => uploadProfile('avatar', e.target));
+  document.getElementById('coverFile').addEventListener('change', e => uploadProfile('cover', e.target));
+
   async function load() {
     try { render(await ZX.api('/api/profile')); } catch (e) { ZX.toast(e.message, 'err'); }
   }

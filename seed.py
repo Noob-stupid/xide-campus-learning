@@ -13,7 +13,7 @@ random.seed(20261020)
 def _clear():
     for t in ['agent_logs', 'workflow_steps', 'workflow_runs', 'relay_pushes', 'messages',
               'reviews', 'content_frames', 'contents', 'study_sessions', 'reservations',
-              'nav_edges', 'nav_nodes', 'seats', 'floors', 'users', 'seat_events', 'devices', 'settings']:
+              'nav_edges', 'nav_nodes', 'seats', 'floors', 'buildings', 'users', 'seat_events', 'devices', 'settings']:
         try:
             db.execute('DELETE FROM %s' % t)
         except Exception:
@@ -66,6 +66,16 @@ FLOOR_SPECS = [
         ],
     },
 ]
+
+
+def _buildings():
+    rows = [
+        ('图书馆', 'LIB', 38.3035, 116.8382, '沧州交通学院 · 图书馆', '主馆，2F/3F 学习空间'),
+        ('教学楼 A', 'TA', 38.3042, 116.8390, '沧州交通学院 · 教学楼 A', '1F 自习室'),
+    ]
+    for name, code, lat, lng, addr, desc in rows:
+        db.execute('INSERT INTO buildings(name,code,lat,lng,address,description) VALUES(?,?,?,?,?,?)',
+                   (name, code, lat, lng, addr, desc))
 
 
 def _build_floors():
@@ -308,6 +318,7 @@ def seed(reset=True):
         print('已有数据，跳过 seed（用 --reset 强制重建）')
         return
     _users()
+    _buildings()
     users = {r['username']: r['id'] for r in db.query('SELECT id,username FROM users')}
     all_seats = _build_floors()
     _contents(users)
