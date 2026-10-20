@@ -139,3 +139,14 @@
     });
   }
 })();
+
+/* 退出登录 */
+(function () {
+  const btn = document.getElementById('logoutBtn');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    if (!confirm('退出登录？')) return;
+    try { await ZX.api('/api/auth/logout', { method: 'POST', body: {} }); } catch (e) {}
+    location.href = '/login';
+  });
+})();

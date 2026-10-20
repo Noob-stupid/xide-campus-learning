@@ -60,7 +60,7 @@
       return;
     }
     const start = new Date(s.started_at.replace(' ', 'T'));
-    area.innerHTML = '<div class="session-banner"><div class="eyebrow" style="color:#e8c98f">正在学习</div>' +
+    area.innerHTML = '<div class="session-banner"><div class="eyebrow" style="color:#00A1D6">正在学习</div>' +
       '<div class="timer" id="learnTimer">00:00</div>' +
       '<div class="meta">' + ZX.escapeHtml(s.seat_code || '') + ' · ' + ZX.escapeHtml(s.zone || '') + ' · ' + ZX.escapeHtml(s.subject || '自主学习') + '</div>' +
       '<div class="row wrap" style="margin-top:16px"><button class="btn amber sm" id="endLearn">结束学习</button>' +

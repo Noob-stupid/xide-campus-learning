@@ -42,67 +42,103 @@ def _users():
                    (username, generate_password_hash('123456'), name, role, college, '', '', sig, interests, db.now()))
 
 
-def _floor_and_seats():
-    fid = db.execute('INSERT INTO floors(name,building,floor_no,plan_w,plan_h) VALUES(?,?,?,?,?)',
-                     ('2F 静学自习区', '图书馆', 2, 960, 620))
-    seats = []
-    zones = [
-        ('A', '靠窗区', 90, 95, 'window', 'window,power'),
-        ('B', '安静区', 620, 95, 'quiet', 'quiet,power'),
-        ('C', '电源区', 90, 420, 'power', 'power'),
-        ('D', '讨论区', 620, 420, 'normal', 'discussion'),
-    ]
-    for zone, zname, x0, y0, stype, feats in zones:
-        n = 1
-        for row in range(3):
-            for col in range(4):
-                x = x0 + col * 62
-                y = y0 + row * 52
-                code = '%s-%02d' % (zone, n)
-                db.execute('INSERT INTO seats(floor_id,code,zone,x,y,w,h,seat_type,features,status) VALUES(?,?,?,?,?,?,?,?,?,?)',
-                           (fid, code, zname, x, y, 30, 24, stype, feats, 'free'))
-                seats.append({'code': code, 'zone': zone, 'x': x, 'y': y})
-                n += 1
-    return fid, seats
+FLOOR_SPECS = [
+    {
+        'building': '图书馆', 'name': '2F 静学自习区', 'floor_no': 2,
+        'zones': [
+            {'code': 'A', 'name': '靠窗区', 'x0': 90, 'y0': 95, 'rows': 3, 'cols': 4, 'dx': 62, 'dy': 52, 'type': 'window', 'features': 'window,power'},
+            {'code': 'B', 'name': '安静区', 'x0': 620, 'y0': 95, 'rows': 3, 'cols': 4, 'dx': 62, 'dy': 52, 'type': 'quiet', 'features': 'quiet,power'},
+            {'code': 'C', 'name': '电源区', 'x0': 90, 'y0': 420, 'rows': 3, 'cols': 4, 'dx': 62, 'dy': 52, 'type': 'power', 'features': 'power'},
+            {'code': 'D', 'name': '讨论区', 'x0': 620, 'y0': 420, 'rows': 3, 'cols': 4, 'dx': 62, 'dy': 52, 'type': 'normal', 'features': 'discussion'},
+        ],
+    },
+    {
+        'building': '图书馆', 'name': '3F 研讨协作区', 'floor_no': 3,
+        'zones': [
+            {'code': 'E', 'name': '研讨区', 'x0': 150, 'y0': 140, 'rows': 2, 'cols': 6, 'dx': 100, 'dy': 120, 'type': 'discussion', 'features': 'discussion,power'},
+            {'code': 'F', 'name': '静音舱', 'x0': 150, 'y0': 430, 'rows': 1, 'cols': 4, 'dx': 100, 'dy': 0, 'type': 'quiet', 'features': 'quiet,power'},
+        ],
+    },
+    {
+        'building': '教学楼 A', 'name': '1F 自习室', 'floor_no': 1,
+        'zones': [
+            {'code': 'G', 'name': '自习区', 'x0': 120, 'y0': 140, 'rows': 3, 'cols': 5, 'dx': 95, 'dy': 65, 'type': 'normal', 'features': 'power'},
+        ],
+    },
+]
 
 
-def _nav(fid, seats):
-    nodes = [
-        ('entry', 480, 600, 'entrance'), ('hall', 480, 520, 'hall'),
-        ('corridor_c', 480, 335, 'corridor'), ('corridor_l', 240, 335, 'corridor'),
-        ('corridor_r', 720, 335, 'corridor'), ('a_corner', 60, 335, 'corner'),
-        ('b_corner', 900, 335, 'corner'), ('c_corner', 60, 380, 'corner'),
-        ('d_corner', 900, 380, 'corner'),
-    ]
-    for zone, x in (('A', 60), ('B', 900), ('C', 60), ('D', 900)):
-        ys = [95, 147, 199] if zone in ('A', 'B') else [420, 472, 524]
-        for i, y in enumerate(ys, 1):
-            nodes.append(('%s_r%d' % (zone.lower(), i), x, y, 'aisle'))
+def _build_floors():
+    """数据驱动的多建筑/多楼层生成：新增场馆只改 FLOOR_SPECS。"""
+    all_seats = []
+    for spec in FLOOR_SPECS:
+        fid = db.execute('INSERT INTO floors(name,building,floor_no,plan_w,plan_h) VALUES(?,?,?,?,?)',
+                         (spec['name'], spec['building'], spec['floor_no'], 960, 620))
+        seats = []
+        for z in spec['zones']:
+            n = 1
+            for row in range(z['rows']):
+                for col in range(z['cols']):
+                    x = z['x0'] + col * z['dx']
+                    y = z['y0'] + row * z['dy']
+                    code = '%s-%02d' % (z['code'], n)
+                    db.execute('INSERT INTO seats(floor_id,code,zone,x,y,w,h,seat_type,features,status) VALUES(?,?,?,?,?,?,?,?,?,?)',
+                               (fid, code, z['name'], x, y, 30, 24, z['type'], z['features'], 'free'))
+                    seats.append({'code': code, 'zone': z['name'], 'zone_code': z['code'],
+                                  'x': x, 'y': y, 'row': row})
+                    n += 1
+        _make_nav(fid, seats)
+        all_seats.extend(seats)
+    return all_seats
+
+
+def _make_nav(fid, seats):
+    """按座位坐标生成可扩展的室内路网：入口→大厅→走廊→分区过道→座位。"""
+    import math
+    from collections import defaultdict
+    corridor_y = 335
+    min_x = min(s['x'] for s in seats) if seats else 100
+    max_x = max(s['x'] for s in seats) if seats else 860
+    nodes = {
+        'entry': (480, 600, 'entrance'),
+        'hall': (480, 520, 'hall'),
+        'corridor_c': (480, corridor_y, 'corridor'),
+        'corridor_l': (min(240, min_x - 80), corridor_y, 'corridor'),
+        'corridor_r': (max(720, max_x + 80), corridor_y, 'corridor'),
+    }
     edges = [
-        ('entry', 'hall', 80), ('hall', 'corridor_c', 185),
-        ('corridor_c', 'corridor_l', 240), ('corridor_c', 'corridor_r', 240),
-        ('corridor_l', 'a_corner', 180), ('corridor_l', 'c_corner', 45),
-        ('corridor_r', 'b_corner', 180), ('corridor_r', 'd_corner', 45),
-        ('a_corner', 'a_r1', 240), ('a_r1', 'a_r2', 52), ('a_r2', 'a_r3', 52),
-        ('b_corner', 'b_r1', 240), ('b_r1', 'b_r2', 52), ('b_r2', 'b_r3', 52),
-        ('c_corner', 'c_r1', 40), ('c_r1', 'c_r2', 52), ('c_r2', 'c_r3', 52),
-        ('d_corner', 'd_r1', 40), ('d_r1', 'd_r2', 52), ('d_r2', 'd_r3', 52),
+        ('entry', 'hall'), ('hall', 'corridor_c'),
+        ('corridor_c', 'corridor_l'), ('corridor_c', 'corridor_r'),
     ]
-    for code, x, y, kind in nodes:
-        db.execute('INSERT INTO nav_nodes(floor_id,code,x,y,kind) VALUES(?,?,?,?,?)', (fid, code, x, y, kind))
-    for a, b, d in edges:
-        db.execute('INSERT INTO nav_edges(floor_id,from_node,to_node,distance) VALUES(?,?,?,?)', (fid, a, b, d))
+    groups = defaultdict(list)
     for s in seats:
-        zone = s['zone']
-        x, y = s['x'], s['y']
-        aisle_x = 60 if zone in ('A', 'C') else 900
-        base_y = 95 if zone in ('A', 'B') else 420
-        row = int(round((y - base_y) / 52)) + 1
-        aisle = '%s_r%d' % (zone.lower(), row)
-        db.execute('INSERT INTO nav_nodes(floor_id,code,x,y,kind) VALUES(?,?,?,?,?)',
-                   (fid, 's_%s' % s['code'], x, y, 'seat'))
+        groups[s['zone_code']].append(s)
+    for zcode, zseats in groups.items():
+        ys = sorted(set(s['y'] for s in zseats))
+        left = min(s['x'] for s in zseats) < 480
+        aisle_x = min(s['x'] for s in zseats) - 34 if left else max(s['x'] for s in zseats) + 34
+        row_nodes = []
+        for i, y in enumerate(ys, 1):
+            code = 'z_%s_r%d' % (zcode.lower(), i)
+            nodes[code] = (aisle_x, y, 'aisle')
+            row_nodes.append(code)
+        for i in range(len(row_nodes) - 1):
+            edges.append((row_nodes[i], row_nodes[i + 1]))
+        corner = 'z_%s_corner' % zcode.lower()
+        nodes[corner] = (aisle_x, corridor_y, 'corner')
+        edges.append((corner, row_nodes[0]))
+        edges.append((corner, 'corridor_l' if left else 'corridor_r'))
+        for s in zseats:
+            node = 's_%s' % s['code']
+            nodes[node] = (s['x'], s['y'], 'seat')
+            edges.append((row_nodes[ys.index(s['y'])], node))
+    for code, (x, y, kind) in nodes.items():
+        db.execute('INSERT INTO nav_nodes(floor_id,code,x,y,kind) VALUES(?,?,?,?,?)', (fid, code, x, y, kind))
+    for a, b in edges:
+        ax, ay, _ = nodes[a]
+        bx, by, _ = nodes[b]
         db.execute('INSERT INTO nav_edges(floor_id,from_node,to_node,distance) VALUES(?,?,?,?)',
-                   (fid, aisle, 's_%s' % s['code'], abs(x - aisle_x)))
+                   (fid, a, b, round(math.hypot(ax - bx, ay - by), 2)))
 
 
 def _font(size):
@@ -122,14 +158,17 @@ def make_video(path, title, slides, red_index=-1):
     from PIL import Image, ImageDraw
     os.makedirs(os.path.dirname(path), exist_ok=True)
     frames = []
+    themes = [(0, 161, 214), (251, 114, 153), (0, 181, 120), (255, 181, 0), (142, 124, 255)]
+    tr, tg, tb = themes[sum(ord(c) for c in title) % len(themes)]
     for si, (t, body) in enumerate(slides):
-        img = Image.new('RGB', (640, 360), (15, 42, 74))
+        img = Image.new('RGB', (640, 360), (tr, tg, tb))
         d = ImageDraw.Draw(img)
         if si == red_index:
-            d.rectangle([0, 0, 640, 360], fill=(160, 28, 28))
+            d.rectangle([0, 0, 640, 360], fill=(190, 32, 46))
         else:
             for y in range(360):
-                d.line([(0, y), (640, y)], fill=(15, 42 + y // 10, 74))
+                k = 1.0 - (y / 360.0) * 0.28
+                d.line([(0, y), (640, y)], fill=(int(tr * k), int(tg * k), int(tb * k)))
         d.text((40, 40), t, font=_font(30), fill=(255, 255, 255))
         yy = 110
         for line in body:
@@ -273,12 +312,11 @@ def seed(reset=True):
         return
     _users()
     users = {r['username']: r['id'] for r in db.query('SELECT id,username FROM users')}
-    fid, seats = _floor_and_seats()
-    _nav(fid, seats)
+    all_seats = _build_floors()
     _contents(users)
     _history(users)
     print('seed 完成：%d 座位 / %d 内容 / %d 用户' % (
-        len(seats), db.one('SELECT COUNT(*) c FROM contents')['c'], len(users)))
+        len(all_seats), db.one('SELECT COUNT(*) c FROM contents')['c'], len(users)))
 
 
 if __name__ == '__main__':

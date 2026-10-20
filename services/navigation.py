@@ -81,7 +81,7 @@ def _human_steps(nodes, codes):
         else:
             d = '向南' if dy > 0 else '向北'
         if d != prev_dir:
-            steps.append('向%s直行' % d)
+            steps.append('%s直行' % d)
             prev_dir = d
     steps.append('到达座位')
     return steps

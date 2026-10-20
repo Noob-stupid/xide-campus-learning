@@ -226,6 +226,14 @@ def api_seats():
     return jsonify({'ok': True, 'seats': rows})
 
 
+@app.route('/api/floors')
+@login_required
+def api_floors():
+    rows = db.query('SELECT f.*, (SELECT COUNT(*) FROM seats s WHERE s.floor_id=f.id) AS seat_count '
+                    'FROM floors f ORDER BY f.building, f.floor_no')
+    return jsonify({'ok': True, 'floors': [dict(x) for x in rows]})
+
+
 @app.route('/api/bookings', methods=['POST'])
 @login_required
 def api_book():
@@ -286,6 +294,8 @@ def api_nav():
     start = request.args.get('from', 'entry')
     r = navigation.plan_path(s['floor_id'], start, 's_%s' % s['code'])
     r['seat'] = s
+    fl = db.one('SELECT * FROM floors WHERE id=?', (s['floor_id'],))
+    r['floor'] = dict(fl) if fl else None
     return jsonify(r)
 
 
@@ -635,7 +645,9 @@ def api_flow_run(rid):
 def api_stats():
     total = db.one('SELECT COUNT(*) c FROM seats')['c']
     fr = db.one('SELECT id FROM floors ORDER BY id LIMIT 1')
-    free = sum(1 for s in seats.seat_rows(fr['id'] if fr else 0) if s['live_status'] == 'free')
+    free = 0
+    for _f in db.query('SELECT id FROM floors'):
+        free += sum(1 for _s in seats.seat_rows(_f['id']) if _s['live_status'] == 'free')
     pending = db.one("SELECT COUNT(*) c FROM contents WHERE status='pending_review'")['c']
     approved = db.one("SELECT COUNT(*) c FROM contents WHERE status='approved'")['c']
     today = datetime.now().strftime('%Y-%m-%d')

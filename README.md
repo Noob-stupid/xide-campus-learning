@@ -14,12 +14,14 @@
 
 ## 功能
 
-- 学生端：登录、今日建议、座位地图、筛选、预约、A* 室内导航、签到、学习计时、卡住了辅导、结束/预约到期、接棒卡、反馈、个人学习档案
+- 学生端：登录/退出、今日建议、**多建筑多楼层选择**、座位地图、筛选、预约、A* 室内导航、签到、学习计时、卡住了辅导、结束/预约到期、接棒卡、反馈、个人学习档案
 - 审核端：待复核队列、一屏帧级工作台（视频 + 帧时间轴 + AI 理由 + 四项清单 + 通过/驳回 + 帧级状态）
 - 编排端：五条工作流（学习计划/预约/学习辅导/接棒推送/交棒审核）的节点图、运行记录、节点日志
 - 内容端：交棒上传、抽帧、AI 初筛、入接力池、按学科浏览
 - 智能体：全局小习浮窗、规则意图路由、座位推荐理由、辅导对话、内容推荐理由；无大模型时全部规则兜底
 - 空间感知：ESP32 上报 API + 管理端设备模拟器（设备状态只补充实时在场，不覆盖预约）
+- 多建筑/多楼层：图书馆 2F/3F、教学楼 A 1F，数据驱动；新增场馆只改 `seed.py` 的 `FLOOR_SPECS`
+- 退出登录：右上角「退出」按钮，调用 `/api/auth/logout` 后回登录页
 
 ## 快速启动
 
@@ -54,13 +56,19 @@ python app.py               # http://127.0.0.1:5820
 
 ## 截图
 
-| 首页 | 空间 | 一屏帧级复核 |
+| 登录 | 首页 | 空间（多楼层） |
 |---|---|---|
-| ![首页](docs/screenshots/01-home.png) | ![空间](docs/screenshots/02-seats.png) | ![复核](docs/screenshots/03-review.png) |
+| ![登录](docs/screenshots/00-login.png) | ![首页](docs/screenshots/01-home.png) | ![空间](docs/screenshots/02-seats.png) |
 
-| 编排 | 学习档案 | 学习页 |
+| 一屏帧级复核 | 编排 | 学习档案 |
 |---|---|---|
-| ![编排](docs/screenshots/04-workflow.png) | ![档案](docs/screenshots/05-profile.png) | ![学习](docs/screenshots/06-learn.png) |
+| ![复核](docs/screenshots/03-review.png) | ![编排](docs/screenshots/04-workflow.png) | ![档案](docs/screenshots/05-profile.png) |
+
+| 学习页 | 接力池 | 3F 导航 |
+|---|---|---|
+| ![学习](docs/screenshots/06-learn.png) | ![接力池](docs/screenshots/07-pool.png) | ![导航](docs/screenshots/08-nav-3f.png) |
+
+> 完整介绍见 [docs/项目详细介绍.md](docs/项目详细介绍.md)。
 
 ## 架构
 
