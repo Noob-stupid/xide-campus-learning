@@ -1,0 +1,111 @@
+{# 习得 · 全站基础布局 #}
+{% macro icon(name, cls='') -%}
+<svg class="icon {{ cls }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  {% if name == 'home' %}<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9.5 21v-6h5v6"/>
+  {% elif name == 'seat' %}<path d="M6 10V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5"/><path d="M4 10h16v7H4z"/><path d="M6 17v4M18 17v4"/>
+  {% elif name == 'book' %}<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+  {% elif name == 'play' %}<path d="M8 5v14l11-7z"/>
+  {% elif name == 'upload' %}<path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>
+  {% elif name == 'shield' %}<path d="M12 3 5 6v6c0 5 3.5 8 7 9 3.5-1 7-4 7-9V6z"/><path d="m9 12 2 2 4-4"/>
+  {% elif name == 'flow' %}<rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="15" y="3" width="6" height="6" rx="1.5"/><rect x="9" y="15" width="6" height="6" rx="1.5"/><path d="M9 6h6M6 9v3h12V9M12 12v3"/>
+  {% elif name == 'user' %}<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/>
+  {% elif name == 'bell' %}<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/>
+  {% elif name == 'spark' %}<path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/>
+  {% elif name == 'arrow' %}<path d="M5 12h14M13 6l6 6-6 6"/>
+  {% elif name == 'clock' %}<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+  {% elif name == 'check' %}<path d="m4 12 5 5L20 6"/>
+  {% elif name == 'close' %}<path d="M6 6l12 12M18 6 6 18"/>
+  {% elif name == 'search' %}<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>
+  {% elif name == 'pin' %}<path d="M12 21s7-6.4 7-11a7 7 0 1 0-14 0c0 4.6 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>
+  {% elif name == 'sun' %}<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/>
+  {% elif name == 'send' %}<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>
+  {% endif %}
+</svg>
+{%- endmacro %}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}习得{% endblock %} · 从落座到学会</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230F2A4A'/%3E%3Cpath d='M8 21h16M11 21v-7a5 5 0 0 1 10 0v7' stroke='%23C98A2E' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body class="page-{{ active|default('login') }}">
+{% if user %}
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="{{ url_for('home') }}">
+      <span class="brand-mark"><svg viewBox="0 0 32 32"><path d="M7 22h18M10 22v-8a6 6 0 0 1 12 0v8" stroke="currentColor" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg></span>
+      <span class="brand-text"><b>习得</b><small>从落座到学会</small></span>
+    </a>
+    <nav class="side-nav">
+      {% for id, label, href, ic in nav_items %}
+      <a class="side-link {{ 'active' if active == id else '' }}" href="{{ href }}">
+        {{ icon(ic) }}<span>{{ label }}</span>
+      </a>
+      {% endfor %}
+    </nav>
+    <div class="side-foot">
+      <div class="side-tip">
+        <b>离座，不放学</b>
+        <span>结束自习后，接力池会给你下一条视频。</span>
+      </div>
+      <a class="side-user" href="{{ url_for('profile_page') }}">
+        <span class="avatar sm">{{ user.name[:1] }}</span>
+        <span><b>{{ user.name }}</b><small>{{ {'student':'学生','teacher':'教师','reviewer':'审核员','admin':'管理员'}.get(user.role, user.role) }}</small></span>
+      </a>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar-title">
+        <span class="eyebrow">{% block eyebrow %}习得 · 校园学习空间{% endblock %}</span>
+        <h1>{% block page_title %}今日{% endblock %}</h1>
+      </div>
+      <div class="topbar-actions">
+        <a class="icon-btn" href="{{ url_for('messages_page') }}" title="消息">
+          {{ icon('bell') }}{% if unread %}<i class="dot">{{ unread }}</i>{% endif %}
+        </a>
+        <a class="user-chip" href="{{ url_for('profile_page') }}">
+          <span class="avatar xs">{{ user.name[:1] }}</span>
+          <span>{{ user.name }}</span>
+        </a>
+      </div>
+    </header>
+    <main class="content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+
+<button class="assistant-fab" id="assistantFab" title="小习 · 学习助手">{{ icon('spark') }}<span>小习</span></button>
+<div class="assistant-panel" id="assistantPanel" aria-hidden="true">
+  <div class="assistant-head">
+    <div><b>小习</b><small>学习空间助手 · 规则兜底</small></div>
+    <button class="icon-btn" id="assistantClose">{{ icon('close') }}</button>
+  </div>
+  <div class="assistant-body" id="assistantBody">
+    <div class="bubble agent">你好，我是小习。可以帮你找座、看当前场次、推荐学习视频，或者陪你拆一个卡住的点。</div>
+    <div class="chips" id="assistantChips">
+      <button data-q="找个靠窗安静的位置">找个靠窗位置</button>
+      <button data-q="我现在学到哪了">我的场次</button>
+      <button data-q="推荐一条高数视频">推荐视频</button>
+      <button data-q="我卡住了：极限">我卡住了</button>
+    </div>
+  </div>
+  <form class="assistant-input" id="assistantForm">
+    <input id="assistantText" placeholder="问小习：找个座 / 学到哪了 / 推荐视频…" autocomplete="off">
+    <button class="btn primary sm" type="submit">{{ icon('send') }}</button>
+  </form>
+</div>
+{% else %}
+  {% block guest %}{% endblock %}
+{% endif %}
+<div class="toast-wrap" id="toastWrap"></div>
+<div class="modal-root" id="modalRoot"></div>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

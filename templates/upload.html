@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% from 'base.html' import icon %}
+{% block title %}交棒{% endblock %}
+{% block page_title %}交棒 · 上传学习视频{% endblock %}
+{% block eyebrow %}把你刚学会的，交给下一个坐下的人{% endblock %}
+{% block content %}
+<div class="upload-layout">
+  <section class="card">
+    <div class="card-head"><h3>交棒一条学习视频</h3><span class="badge amber">AI 初筛 + 人工帧级复核</span></div>
+    <div class="card-body">
+      <form class="form" id="uploadForm">
+        <div class="dropzone" id="dropzone">
+          <div class="up-icon">{{ icon('upload') }}</div>
+          <b id="dropTitle">点击选择，或把视频拖到这里</b>
+          <small id="dropHint">支持 mp4 / mov / webm，建议 1–10 分钟，500MB 以内</small>
+          <input type="file" id="file" accept="video/mp4,video/quicktime,video/webm" hidden>
+          <div class="progress" id="progress" style="display:none"><i></i></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>标题</label><input class="input" id="title" placeholder="例如：极限的直觉：从无限逼近到 ε-δ" required></div>
+          <div class="field"><label>学科</label><select class="input" id="subject"><option>高等数学</option><option>英语</option><option>编程</option><option>大学物理</option><option>学习方法</option><option>其他</option></select></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>知识点</label><input class="input" id="knowledge" placeholder="例如：极限, ε-δ"></div>
+          <div class="field"><label>来源</label><select class="input" id="sourceType"><option value="student">同学交棒</option><option value="teacher">教师交棒</option></select></div>
+        </div>
+        <div class="field"><label>一句话简介</label><textarea class="input" id="description" placeholder="这条视频讲什么？适合谁看？"></textarea></div>
+        <label class="check-item"><input type="checkbox" id="rights" required> 我确认这是原创内容，或已获得作者授权；不包含他人隐私信息。</label>
+        <button class="btn primary lg block" type="submit" id="submitBtn">{{ icon('upload') }} 提交交棒</button>
+        <div class="small muted" id="uploadMsg">提交后会进入抽帧 → AI 初筛 → 人工帧级复核；通过后才进入接力池。</div>
+      </form>
+    </div>
+  </section>
+
+  <aside class="stack">
+    <section class="card">
+      <div class="card-head"><h3>审核清单</h3><span class="small muted">四项</span></div>
+      <div class="card-body">
+        <div class="list-item"><div class="thumb">{{ icon('shield') }}</div><div class="grow"><b>合规</b><small>无违法、色情、暴力、广告导流</small></div></div>
+        <div class="list-item"><div class="thumb">{{ icon('sun') }}</div><div class="grow"><b>质量</b><small>画面清晰、声音可听、无遮挡</small></div></div>
+        <div class="list-item"><div class="thumb">{{ icon('book') }}</div><div class="grow"><b>相关性</b><small>与学习/教学相关，标题与内容一致</small></div></div>
+        <div class="list-item"><div class="thumb">{{ icon('user') }}</div><div class="grow"><b>版权与隐私</b><small>原创或已授权，不出现他人隐私</small></div></div>
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h3>我的交棒</h3><span class="small muted" id="myCount">—</span></div>
+      <div class="card-body" id="myContents"><div class="skeleton" style="height:60px"></div></div>
+    </section>
+  </aside>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const fileInput = document.getElementById('file');
+  const drop = document.getElementById('dropzone');
+  const progress = document.getElementById('progress');
+  drop.addEventListener('click', () => fileInput.click());
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+  drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('drag'); if (e.dataTransfer.files.length) { fileInput.files = e.dataTransfer.files; showFile(); } });
+  fileInput.addEventListener('change', showFile);
+  function showFile() {
+    if (!fileInput.files.length) return;
+    const f = fileInput.files[0];
+    document.getElementById('dropTitle').textContent = f.name;
+    document.getElementById('dropHint').textContent = (f.size / 1024 / 1024).toFixed(1) + ' MB · 准备提交';
+  }
+  async function loadMine() {
+    try {
+      const r = await ZX.api('/api/my/contents');
+      const list = r.contents || [];
+      document.getElementById('myCount').textContent = list.length + ' 条';
+      const box = document.getElementById('myContents');
+      if (!list.length) { box.innerHTML = '<div class="empty" style="padding:22px 0"><b>还没有交棒</b><span>第一条视频，从一个你刚弄懂的点开始。</span></div>'; return; }
+      box.innerHTML = list.map(c => '<div class="list-item"><div class="thumb">' + (c.cover_url ? '<img src="' + c.cover_url + '">' : '🎬') + '</div><div class="grow"><b>' + ZX.escapeHtml(c.title) + '</b><small>' + ZX.escapeHtml(c.subject) + ' · ' + ZX.fmtDate(c.created_at) + '</small></div>' + ZX.statusBadge(c.status) + '</div>').join('');
+    } catch (e) {}
+  }
+  document.getElementById('uploadForm').addEventListener('submit', e => {
+    e.preventDefault();
+    if (!fileInput.files.length) { ZX.toast('先选择视频文件', 'err'); return; }
+    const fd = new FormData();
+    fd.append('file', fileInput.files[0]);
+    fd.append('title', document.getElementById('title').value.trim());
+    fd.append('subject', document.getElementById('subject').value);
+    fd.append('knowledge_point', document.getElementById('knowledge').value.trim());
+    fd.append('description', document.getElementById('description').value.trim());
+    fd.append('source_type', document.getElementById('sourceType').value);
+    const btn = document.getElementById('submitBtn'); btn.disabled = true; btn.textContent = '正在上传…';
+    progress.style.display = 'block';
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/contents');
+    xhr.upload.onprogress = ev => { if (ev.lengthComputable) progress.querySelector('i').style.width = (ev.loaded / ev.total * 100) + '%'; };
+    xhr.onload = () => {
+      let data = {}; try { data = JSON.parse(xhr.responseText); } catch (e) {}
+      if (xhr.status >= 200 && xhr.status < 300 && data.ok) {
+        progress.querySelector('i').style.width = '100%';
+        document.getElementById('uploadMsg').textContent = '已提交：抽帧 + AI 初筛完成，状态为待人工复核。';
+        ZX.toast('交棒成功，进入待复核');
+        btn.disabled = false; btn.textContent = '再交一条';
+        loadMine();
+      } else {
+        ZX.toast((data && data.error) || '上传失败', 'err');
+        btn.disabled = false; btn.textContent = '提交交棒';
+      }
+    };
+    xhr.onerror = () => { ZX.toast('网络错误', 'err'); btn.disabled = false; btn.textContent = '提交交棒'; };
+    xhr.send(fd);
+  });
+  loadMine();
+</script>
+{% endblock %}

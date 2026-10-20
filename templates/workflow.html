@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+{% from 'base.html' import icon %}
+{% block title %}编排{% endblock %}
+{% block page_title %}编排 · 流水线与运行轨迹{% endblock %}
+{% block eyebrow %}五条流 · 节点级可追溯{% endblock %}
+{% block content %}
+<div class="stack">
+  <div class="grid g4" id="flowStats">
+    <div class="stat"><div class="label">工作流运行</div><div class="value" id="stRuns">—</div><div class="delta">最近 30 条</div></div>
+    <div class="stat"><div class="label">节点成功率</div><div class="value" id="stRate">—<small>%</small></div><div class="delta">按步骤统计</div></div>
+    <div class="stat"><div class="label">今日场次</div><div class="value" id="stSess">—</div><div class="delta">结束即触发接棒</div></div>
+    <div class="stat"><div class="label">待复核</div><div class="value" id="stPend">—</div><div class="delta">交棒流水线</div></div>
+  </div>
+
+  <div class="flow-tabs" id="flowTabs"></div>
+
+  <section class="card">
+    <div class="card-head"><h3 id="flowTitle">流水线</h3><span class="badge blue" id="flowKey">—</span></div>
+    <div class="card-body">
+      <div class="flow-graph"><svg class="flow-svg" id="flowSvg" viewBox="0 0 960 210"></svg></div>
+    </div>
+  </section>
+
+  <div class="grid" style="grid-template-columns:340px minmax(0,1fr)">
+    <section class="card">
+      <div class="card-head"><h3>运行记录</h3><span class="small muted">点一条看轨迹</span></div>
+      <div class="card-body"><div class="run-list" id="runList"><div class="skeleton" style="height:80px"></div></div></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h3 id="runTitle">运行轨迹</h3><span class="badge gray" id="runBadge">未选择</span></div>
+      <div class="card-body" id="runDetail"><div class="empty"><div class="empty-icon">{{ icon('flow') }}</div><b>选一条运行记录</b><span>看每个节点的输入、输出、耗时与失败原因。</span></div></div>
+    </section>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  let flows = [], activeFlow = null, runs = [], allRuns = [], activeRun = null;
+  function drawGraph(flow, run) {
+    const svg = document.getElementById('flowSvg');
+    const nodes = flow.nodes || [];
+    const stepStatus = {};
+    if (run) (run.steps || []).forEach(s => stepStatus[s.node_id] = s.status);
+    const W = Math.max(900, nodes.length * 152 + 40);
+    svg.setAttribute('viewBox', '0 0 ' + W + ' 210');
+    svg.innerHTML = '<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#cfd8e4"></path></marker></defs>' +
+      nodes.map((n, i) => {
+        const x = 40 + i * 152, y = 64;
+        const st = stepStatus[n.id] || '';
+        return '<g class="flow-node ' + st + '"><rect x="' + x + '" y="' + y + '" width="126" height="58" rx="10"></rect>' +
+          '<text x="' + (x + 63) + '" y="' + (y + 24) + '">' + ZX.escapeHtml(n.name) + '</text>' +
+          '<text x="' + (x + 63) + '" y="' + (y + 42) + '" style="fill:#8b97a8;font-size:9px">' + ZX.escapeHtml(n.type) + '</text></g>' +
+          (i < nodes.length - 1 ? '<line class="flow-edge" x1="' + (x + 126) + '" y1="' + (y + 29) + '" x2="' + (x + 148) + '" y2="' + (y + 29) + '"></line>' : '');
+      }).join('');
+  }
+  function renderTabs() {
+    const box = document.getElementById('flowTabs');
+    box.innerHTML = flows.map((f, i) => '<button class="chip ' + (activeFlow && activeFlow.key === f.key ? 'active' : '') + '" data-k="' + f.key + '">' + ZX.escapeHtml(f.title) + '</button>').join('');
+    box.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { activeFlow = flows.find(f => f.key === b.dataset.k); renderTabs(); renderFlow(); loadRuns(); }));
+  }
+  function renderFlow() {
+    if (!activeFlow) return;
+    document.getElementById('flowTitle').textContent = activeFlow.title;
+    document.getElementById('flowKey').textContent = activeFlow.key;
+    const run = activeRun && activeRun.flow_key === activeFlow.key ? activeRun : null;
+    drawGraph(activeFlow, run);
+  }
+  async function loadRuns() {
+    const r = await ZX.api('/api/workflow/runs');
+    allRuns = r.runs || [];
+    runs = allRuns.filter(x => !activeFlow || x.flow_key === activeFlow.key);
+    const box = document.getElementById('runList');
+    if (!runs.length) { box.innerHTML = '<div class="empty" style="padding:20px 0"><b>还没有运行</b><span>去预约或交棒，运行轨迹会自动出现。</span></div>'; return; }
+    box.innerHTML = runs.map(x => '<div class="run-item ' + (activeRun && activeRun.id === x.id ? 'active' : '') + '" data-id="' + x.id + '"><div class="row between"><b>#' + x.id + ' · ' + ZX.escapeHtml(x.title) + '</b><span class="badge ' + (x.status === 'succeeded' ? 'green' : x.status === 'failed' ? 'red' : 'amber') + '">' + ZX.escapeHtml(x.status) + '</span></div><small>' + ZX.fmtDate(x.started_at) + ' · ' + x.step_count + ' 节点</small></div>').join('');
+    box.querySelectorAll('.run-item').forEach(el => el.addEventListener('click', () => loadRun(Number(el.dataset.id))));
+  }
+  async function loadRun(id) {
+    try {
+      const r = await ZX.api('/api/workflow/runs/' + id);
+      activeRun = r.run;
+      document.getElementById('runTitle').textContent = '#' + activeRun.id + ' · ' + activeRun.title;
+      const badge = document.getElementById('runBadge');
+      badge.className = 'badge ' + (activeRun.status === 'succeeded' ? 'green' : activeRun.status === 'failed' ? 'red' : 'amber');
+      badge.textContent = activeRun.status;
+      const steps = activeRun.steps || [];
+      document.getElementById('runDetail').innerHTML = steps.map((s, i) => '<div class="step-row ' + s.status + '"><span class="sdot">' + (s.status === 'succeeded' ? '✓' : s.status === 'failed' ? '!' : '·') + '</span><div class="sbody"><div class="row between"><b>' + ZX.escapeHtml(s.node_name) + '</b><span class="badge ' + (s.status === 'succeeded' ? 'green' : s.status === 'failed' ? 'red' : 'amber') + '">' + s.status + '</span></div><small>' + ZX.fmtDate(s.started_at) + ' → ' + ZX.fmtDate(s.finished_at) + '</small><small>' + ZX.escapeHtml(JSON.stringify(s.detail && s.detail.output || {}).slice(0, 180)) + '</small></div></div>').join('') || '<div class="empty"><b>没有步骤</b></div>';
+      renderFlow();
+      loadRuns();
+    } catch (e) { ZX.toast(e.message, 'err'); }
+  }
+  async function loadStats() {
+    try {
+      const st = (await ZX.api('/api/stats')).stats;
+      document.getElementById('stSess').textContent = st.sessions_today;
+      document.getElementById('stPend').textContent = st.pending_review;
+      const r = await ZX.api('/api/workflow/runs');
+      document.getElementById('stRuns').textContent = (r.runs || []).length;
+      let total = 0, ok = 0;
+      for (const run of (r.runs || []).slice(0, 10)) {
+        const d = await ZX.api('/api/workflow/runs/' + run.id);
+        (d.run.steps || []).forEach(s => { total++; if (s.status === 'succeeded') ok++; });
+      }
+      document.getElementById('stRate').innerHTML = (total ? Math.round(ok * 100 / total) : 0) + '<small>%</small>';
+    } catch (e) {}
+  }
+  (async function init() {
+    try {
+      const r = await ZX.api('/api/workflow/defs');
+      flows = r.flows || [];
+      activeFlow = flows[0] || null;
+      renderTabs(); renderFlow(); await loadRuns();
+      if (!runs.length && allRuns.length) {
+        activeFlow = flows.find(f => f.key === allRuns[0].flow_key) || activeFlow;
+        renderTabs(); renderFlow(); await loadRuns();
+      }
+      if (runs.length) loadRun(runs[0].id);
+      loadStats();
+      setInterval(() => { loadRuns(); }, 12000);
+    } catch (e) { ZX.toast(e.message, 'err'); }
+  })();
+</script>
+{% endblock %}

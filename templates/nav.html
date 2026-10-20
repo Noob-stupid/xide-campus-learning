@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+{% from 'base.html' import icon %}
+{% block title %}导航{% endblock %}
+{% block page_title %}空间 · 室内导航{% endblock %}
+{% block eyebrow %}从入口到座位{% endblock %}
+{% block content %}
+<div class="nav-layout">
+  <section class="card floor-card">
+    <div class="floor-toolbar">
+      <span class="badge blue">A* 室内路网</span>
+      <span class="small muted" id="navHint">正在规划路径…</span>
+      <a class="btn ghost sm" href="/seats" style="margin-left:auto">返回空间</a>
+    </div>
+    <svg class="seat-svg" id="navSvg" viewBox="0 0 960 620">
+      <rect class="wall" x="20" y="20" width="920" height="580" rx="18"></rect>
+      <path class="corridor" d="M56 335 H904 M480 335 V598"></path>
+      <text class="zone-label" x="90" y="72">A · 靠窗区</text>
+      <text class="zone-label" x="620" y="72">B · 安静区</text>
+      <text class="zone-label" x="90" y="398">C · 电源区</text>
+      <text class="zone-label" x="620" y="398">D · 讨论区</text>
+      <circle class="entry" cx="480" cy="598" r="13"></circle>
+      <text class="entry-text" x="480" y="602" text-anchor="middle">入口</text>
+      <g id="navSeats"></g>
+      <polyline id="navPath" fill="none" stroke="#c98a2e" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity="0"></polyline>
+      <g id="navNodes"></g>
+    </svg>
+  </section>
+
+  <aside class="stack">
+    <section class="card">
+      <div class="card-head"><h3>本次目的地</h3><span class="badge green" id="navSeatBadge">—</span></div>
+      <div class="card-body">
+        <div class="row between"><div><div class="seat-code" id="navSeatCode">—</div><div class="small muted" id="navSeatZone">—</div></div><div style="text-align:right"><div class="small muted">预计步行</div><b id="navMinutes" style="font-size:22px">—</b></div></div>
+        <div class="nav-meta"><div><b id="navMeters">—</b><small>米</small></div><div><b id="navSteps">—</b><small>步</small></div></div>
+        <div class="nav-steps" id="navStepList"></div>
+        <div class="divider"></div>
+        <div class="row wrap" id="navActions"></div>
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h3>导航说明</h3></div>
+      <div class="card-body small muted">
+        路径基于馆内路网计算，距离按 1 像素 ≈ 1.2 厘米估算，步行速度按 1.1 m/s 估算。签到后开始计时；结束或到期后触发接棒。
+      </div>
+    </section>
+  </aside>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const qs = new URLSearchParams(location.search);
+  let seatId = Number(qs.get('seat_id') || 0);
+  let currentSession = null, reservation = null, seat = null;
+
+  function drawSeats(seats) {
+    const g = document.getElementById('navSeats');
+    g.innerHTML = seats.map(s => '<circle cx="' + s.x + '" cy="' + s.y + '" r="4" fill="' + (s.id === seatId ? '#c98a2e' : '#cfd8e4') + '"></circle>').join('');
+  }
+  function drawPath(path) {
+    const line = document.getElementById('navPath');
+    line.setAttribute('points', path.map(p => p.x + ',' + p.y).join(' '));
+    line.setAttribute('opacity', '1');
+    document.getElementById('navNodes').innerHTML = path.map((p, i) =>
+      '<circle cx="' + p.x + '" cy="' + p.y + '" r="' + (i === path.length - 1 ? 9 : 5) + '" fill="' + (i === path.length - 1 ? '#0f2a4a' : '#ffffff') + '" stroke="#c98a2e" stroke-width="2"></circle>').join('');
+  }
+  async function load() {
+    try {
+      const seatsRes = await ZX.api('/api/seats?floor_id=1');
+      drawSeats(seatsRes.seats);
+      if (!seatId) {
+        const cur = await ZX.api('/api/sessions/current');
+        if (cur.session) seatId = cur.session.seat_id;
+        if (!seatId) {
+          const mt = await ZX.api('/api/my/reservations');
+          const booked = (mt.reservations || []).find(r => r.status === 'booked' || r.status === 'checked_in');
+          if (booked) seatId = booked.seat_id;
+        }
+      }
+      if (!seatId) { document.getElementById('navHint').textContent = '还没有预约，先去空间选一个座位。'; return; }
+      const nav = await ZX.api('/api/nav?seat_id=' + seatId + '&from=entry');
+      if (!nav.ok) { document.getElementById('navHint').textContent = nav.error || '路径规划失败'; return; }
+      seat = nav.seat;
+      document.getElementById('navSeatCode').textContent = seat.code;
+      document.getElementById('navSeatZone').textContent = seat.zone + ' · ' + seat.seat_type;
+      document.getElementById('navSeatBadge').textContent = '可到达';
+      document.getElementById('navMinutes').textContent = nav.minutes + ' 分钟';
+      document.getElementById('navMeters').textContent = nav.distance;
+      document.getElementById('navSteps').textContent = nav.path.length * 3;
+      document.getElementById('navStepList').innerHTML = nav.steps.map((s, i) => '<div class="nav-step"><span class="n">' + (i + 1) + '</span><span class="t">' + ZX.escapeHtml(s) + '</span></div>').join('');
+      drawPath(nav.path);
+      document.getElementById('navHint').textContent = '路径已生成 · ' + nav.distance + ' 米 · 约 ' + nav.minutes + ' 分钟';
+      const cur = await ZX.api('/api/sessions/current');
+      currentSession = cur.session;
+      const mt = await ZX.api('/api/my/reservations');
+      reservation = (mt.reservations || []).find(r => r.seat_id === seatId && (r.status === 'booked' || r.status === 'checked_in'));
+      const actions = document.getElementById('navActions');
+      if (currentSession) {
+        actions.innerHTML = '<a class="btn primary sm" href="/learn">进入学习</a><button class="btn ghost sm" id="endBtn">结束学习</button>';
+        document.getElementById('endBtn').addEventListener('click', endNow);
+      } else if (reservation && reservation.status === 'booked') {
+        actions.innerHTML = '<button class="btn primary sm" id="checkinBtn">到了，签到</button><a class="btn ghost sm" href="/seats">重新选座</a>';
+        document.getElementById('checkinBtn').addEventListener('click', checkin);
+      } else {
+        actions.innerHTML = '<a class="btn primary sm" href="/seats">去预约</a>';
+      }
+    } catch (e) { ZX.toast(e.message, 'err'); document.getElementById('navHint').textContent = e.message; }
+  }
+  async function checkin() {
+    try { await ZX.api('/api/bookings/' + reservation.id + '/checkin', { method: 'POST' }); ZX.toast('签到成功，开始计时'); location.href = '/learn'; }
+    catch (e) { ZX.toast(e.message, 'err'); }
+  }
+  async function endNow() {
+    if (!currentSession) return;
+    if (!confirm('结束本场学习并触发接棒？')) return;
+    try { await ZX.api('/api/bookings/' + currentSession.reservation_id + '/end', { method: 'POST' }); ZX.toast('已结束，正在匹配学习视频'); location.href = '/learn'; }
+    catch (e) { ZX.toast(e.message, 'err'); }
+  }
+  load();
+</script>
+{% endblock %}

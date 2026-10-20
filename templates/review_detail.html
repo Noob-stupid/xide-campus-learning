@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+{% from 'base.html' import icon %}
+{% block title %}帧级复核{% endblock %}
+{% block page_title %}帧级复核 · 一屏完成{% endblock %}
+{% block eyebrow %}AI 标疑点 · 人工拍板 · 帧级可追溯{% endblock %}
+{% block content %}
+<div class="stack" id="reviewRoot">
+  <div class="row between wrap">
+    <div class="row">
+      <a class="btn ghost sm" href="/review">← 返回队列</a>
+      <span class="badge gray" id="statusBadge">加载中</span>
+    </div>
+    <div class="small muted" id="metaLine">—</div>
+  </div>
+
+  <div class="review-workbench">
+    <section class="card" style="overflow:hidden">
+      <div class="video-box">
+        <video id="video" controls preload="metadata" style="width:100%;max-height:420px;background:#000"></video>
+      </div>
+      <div class="frame-strip" id="frameStrip"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h3>AI 初筛与帧证据</h3><span class="badge amber" id="riskBadge">—</span></div>
+      <div class="card-body stack">
+        <div class="ai-panel" id="aiSummary">正在读取初筛结果…</div>
+        <div id="frameInfo" class="small muted">点一个帧，看它为什么可疑。</div>
+        <div class="divider"></div>
+        <div class="row between"><b class="small">逐帧状态</b><button class="btn ghost sm" id="clearAll">全部清除</button></div>
+        <div id="frameList" class="stack" style="gap:8px;max-height:300px;overflow:auto"></div>
+      </div>
+    </section>
+
+    <aside class="card">
+      <div class="card-head"><h3>复核结论</h3><span class="small muted">四项清单</span></div>
+      <div class="card-body stack">
+        <div class="checklist" id="checklist">
+          <label class="check-item"><input type="checkbox" data-k="compliance"> 合规：无违法/色情/暴力/广告导流</label>
+          <label class="check-item"><input type="checkbox" data-k="quality"> 质量：画面清晰、声音可听</label>
+          <label class="check-item"><input type="checkbox" data-k="relevance"> 相关性：学习/教学，标题一致</label>
+          <label class="check-item"><input type="checkbox" data-k="rights"> 版权与隐私：原创或已授权</label>
+        </div>
+        <div class="field"><label>复核意见</label><textarea class="input" id="note" placeholder="写清为什么通过/驳回；驳回会反馈给交棒者"></textarea></div>
+        <button class="btn teal block" id="approveBtn">通过并入接力池</button>
+        <button class="btn danger block" id="rejectBtn">驳回</button>
+        <div class="small muted">通过后，内容才会进入结束/到期后的接棒匹配。</div>
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const cid = {{ content_id }};
+  let content = null;
+  const frameStatus = {};
+  const video = document.getElementById('video');
+
+  function riskClass(f) { return f.status === 'flagged' || Number(f.risk) >= 0.55 ? 'risk' : (f.status === 'cleared' ? 'cleared' : ''); }
+  function render() {
+    if (!content) return;
+    document.getElementById('statusBadge').className = 'badge ' + (content.status === 'approved' ? 'green' : content.status === 'rejected' ? 'red' : 'amber');
+    document.getElementById('statusBadge').textContent = content.status === 'approved' ? '已入池' : content.status === 'rejected' ? '已驳回' : '待复核';
+    document.getElementById('metaLine').textContent = content.subject + ' · ' + (content.owner_name || '匿名') + ' · ' + ZX.fmtDuration(content.duration_sec) + ' · ' + ZX.fmtDate(content.created_at);
+    document.getElementById('aiSummary').textContent = content.ai_summary || '暂无 AI 初筛摘要';
+    document.getElementById('riskBadge').textContent = '最高风险 ' + Number(content.ai_risk || 0).toFixed(2);
+    video.src = content.file_url || '';
+
+    const strip = document.getElementById('frameStrip');
+    strip.innerHTML = content.frames.map(f => '<div class="frame-thumb ' + riskClass(f) + '" data-fid="' + f.id + '"><img src="' + f.url + '"><span class="ts">' + f.ts_sec.toFixed(1) + 's</span>' + (Number(f.risk) >= 0.55 ? '<span class="rk">可疑</span>' : '') + '</div>').join('');
+    strip.querySelectorAll('.frame-thumb').forEach(el => el.addEventListener('click', () => selectFrame(Number(el.dataset.fid))));
+
+    const list = document.getElementById('frameList');
+    list.innerHTML = content.frames.map(f => '<div class="row between" style="gap:8px;padding:7px 9px;border:1px solid var(--line-2);border-radius:9px;background:#fff"><div style="min-width:0"><b class="small">帧 ' + f.idx + ' · ' + f.ts_sec.toFixed(1) + 's</b><div class="small muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (f.labels.length ? f.labels.join(' / ') : '无明显风险') + '</div></div><div class="row" style="gap:4px"><button class="btn ghost sm" data-clear="' + f.id + '">清除</button><button class="btn danger sm" data-flag="' + f.id + '">标记</button></div></div>').join('');
+    list.querySelectorAll('[data-clear]').forEach(b => b.addEventListener('click', () => setFrame(Number(b.dataset.clear), 'cleared')));
+    list.querySelectorAll('[data-flag]').forEach(b => b.addEventListener('click', () => setFrame(Number(b.dataset.flag), 'flagged')));
+  }
+  function selectFrame(fid) {
+    const f = content.frames.find(x => x.id === fid);
+    if (!f) return;
+    video.currentTime = Number(f.ts_sec) || 0;
+    video.play().catch(() => {});
+    document.getElementById('frameInfo').innerHTML = '<b>帧 ' + f.idx + ' @ ' + Number(f.ts_sec).toFixed(1) + 's</b><br>' +
+      '风险 ' + Number(f.risk).toFixed(2) + ' · ' + (f.labels.length ? f.labels.join(' / ') : '无标签') + '<br>' +
+      (f.reasons || '无补充说明') + '<br><span class="badge ' + (f.status === 'cleared' ? 'green' : f.status === 'flagged' ? 'red' : 'gray') + '">' + ({pending:'待判',cleared:'已清除',flagged:'已标记'}[f.status] || f.status) + '</span>';
+    document.querySelectorAll('.frame-thumb').forEach(el => el.style.outline = Number(el.dataset.fid) === fid ? '3px solid #c98a2e' : 'none');
+  }
+  function setFrame(fid, status) {
+    frameStatus[fid] = status;
+    const f = content.frames.find(x => x.id === fid);
+    if (f) f.status = status;
+    render();
+    ZX.toast(status === 'cleared' ? '该帧已清除' : '该帧已标记违规');
+  }
+  document.getElementById('clearAll').addEventListener('click', () => { content.frames.forEach(f => { frameStatus[f.id] = 'cleared'; f.status = 'cleared'; }); render(); ZX.toast('所有帧已清除'); });
+  async function decide(decision) {
+    const checklist = {};
+    document.querySelectorAll('#checklist input').forEach(x => checklist[x.dataset.k] = x.checked);
+    if (decision === 'approve' && !Object.values(checklist).every(Boolean)) {
+      ZX.toast('通过前请勾选四项清单', 'err'); return;
+    }
+    const btn = decision === 'approve' ? document.getElementById('approveBtn') : document.getElementById('rejectBtn');
+    btn.disabled = true; btn.textContent = '提交中…';
+    try {
+      await ZX.api('/api/review/' + cid + '/decision', { method: 'POST', body: {
+        decision, note: document.getElementById('note').value.trim(), checklist, frame_status: frameStatus
+      }});
+      ZX.toast(decision === 'approve' ? '已通过，进入接力池' : '已驳回', decision === 'approve' ? 'ok' : 'err');
+      setTimeout(() => location.href = '/review', 800);
+    } catch (e) { ZX.toast(e.message, 'err'); btn.disabled = false; btn.textContent = decision === 'approve' ? '通过并入接力池' : '驳回'; }
+  }
+  document.getElementById('approveBtn').addEventListener('click', () => decide('approve'));
+  document.getElementById('rejectBtn').addEventListener('click', () => decide('reject'));
+  (async function () {
+    try { const r = await ZX.api('/api/review/' + cid); content = r.content; render(); }
+    catch (e) { ZX.toast(e.message, 'err'); }
+  })();
+</script>
+{% endblock %}

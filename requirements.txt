@@ -1,0 +1,12 @@
+# 本地演示依赖
+Flask>=3.0
+opencv-python>=4.9
+numpy>=1.26
+Pillow>=10.0
+pytest>=8.0
+
+# 云上部署（按需）
+# gunicorn>=21.0
+# PyMySQL>=1.1
+# redis>=5.0
+# obs-sdk>=3.23

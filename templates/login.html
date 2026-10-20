@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+{% block title %}登录{% endblock %}
+{% block guest %}
+<div class="login-wrap">
+  <section class="login-art">
+    <div class="brand">
+      <span class="brand-mark" style="color:#c98a2e"><svg viewBox="0 0 32 32"><path d="M7 22h18M10 22v-8a6 6 0 0 1 12 0v8" stroke="currentColor" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg></span>
+      <span class="brand-text"><b style="color:#fff">习得</b><small style="color:#8fa6c2">从落座到学会</small></span>
+    </div>
+    <div>
+      <div class="eyebrow" style="color:#c98a2e">Campus Learning Space</div>
+      <h1>离座，<br>不放学。</h1>
+      <p>一次自习结束，不是服务的终点。系统会从已通过 AI + 人工帧级复核的接力池里，挑一条适合你的 3 分钟学习视频，推到你面前。</p>
+      <div class="quote">座位会空，学习不会。— 习得</div>
+    </div>
+    <div style="font-size:11.5px;color:#7f97b3;position:relative;z-index:1">
+      智学空间 · 校园学习空间智能体　|　Web 作品 · 华为云部署
+    </div>
+  </section>
+  <section class="login-form-side">
+    <div class="login-card">
+      <h2>欢迎回来</h2>
+      <div class="sub">用演示账号进入，体验完整的「预约 → 学习 → 接棒」闭环。</div>
+      <form class="form" id="loginForm">
+        <div class="field">
+          <label for="username">账号</label>
+          <input class="input" id="username" name="username" placeholder="student" autocomplete="username" required>
+        </div>
+        <div class="field">
+          <label for="password">密码</label>
+          <input class="input" id="password" name="password" type="password" placeholder="123456" autocomplete="current-password" required>
+        </div>
+        <button class="btn primary lg block" type="submit" id="loginBtn">进入习得</button>
+      </form>
+      <div class="demo-users">
+        <button class="demo-user" data-u="student" data-p="123456"><b>林晓 · 学生</b><small>找座 / 学习 / 接棒</small></button>
+        <button class="demo-user" data-u="reviewer" data-p="123456"><b>周老师 · 审核员</b><small>一屏帧级复核</small></button>
+        <button class="demo-user" data-u="admin" data-p="123456"><b>管理员</b><small>编排 / 指标 / 治理</small></button>
+        <button class="demo-user" data-u="teacher" data-p="123456"><b>陈老师 · 教师</b><small>交棒教学视频</small></button>
+      </div>
+      <div class="login-foot">演示密码统一为 123456 · 数据仅用于比赛演示</div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const form = document.getElementById('loginForm');
+  document.querySelectorAll('.demo-user').forEach(b => b.addEventListener('click', () => {
+    document.getElementById('username').value = b.dataset.u;
+    document.getElementById('password').value = b.dataset.p;
+    form.requestSubmit();
+  }));
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('loginBtn');
+    btn.disabled = true; btn.textContent = '正在进入…';
+    try {
+      await ZX.api('/api/auth/login', { method: 'POST', body: {
+        username: document.getElementById('username').value.trim(),
+        password: document.getElementById('password').value
+      }});
+      const next = new URLSearchParams(location.search).get('next');
+      location.href = next || '/';
+    } catch (err) {
+      ZX.toast(err.message, 'err');
+      btn.disabled = false; btn.textContent = '进入习得';
+    }
+  });
+</script>
+{% endblock %}

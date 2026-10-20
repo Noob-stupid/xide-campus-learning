@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% from 'base.html' import icon %}
+{% block title %}接力池{% endblock %}
+{% block page_title %}接力池 · 已过审学习内容{% endblock %}
+{% block eyebrow %}只放通过 AI + 人工帧级复核的内容{% endblock %}
+{% block content %}
+<div class="stack">
+  <div class="pool-toolbar">
+    <div class="chips" id="subjectFilters">
+      <button class="chip active" data-s="">全部</button>
+      <button class="chip" data-s="高等数学">高等数学</button>
+      <button class="chip" data-s="英语">英语</button>
+      <button class="chip" data-s="编程">编程</button>
+      <button class="chip" data-s="学习方法">学习方法</button>
+    </div>
+    <div class="spacer"></div>
+    <a class="btn primary sm" href="/upload">{{ icon('upload') }} 交棒一条</a>
+  </div>
+  <div class="content-grid" id="contentGrid">
+    <div class="skeleton" style="height:240px"></div>
+    <div class="skeleton" style="height:240px"></div>
+    <div class="skeleton" style="height:240px"></div>
+    <div class="skeleton" style="height:240px"></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  let contents = [], subject = '';
+  function srcBadge(t) { return t === 'teacher' ? '<span class="badge amber src">教师</span>' : (t === 'platform' ? '<span class="badge blue src">平台精选</span>' : '<span class="badge gray src">同学交棒</span>'); }
+  function render() {
+    const grid = document.getElementById('contentGrid');
+    const list = contents.filter(c => !subject || c.subject === subject);
+    if (!list.length) {
+      grid.innerHTML = '<div class="card" style="grid-column:1/-1"><div class="empty"><div class="empty-icon">🎬</div><b>这个学科还没有内容</b><span>去交棒一条，让下一个自习的人接到。</span><div style="margin-top:14px"><a class="btn primary" href="/upload">去交棒</a></div></div></div>';
+      return;
+    }
+    grid.innerHTML = list.map(c => '<article class="content-card" data-id="' + c.id + '"><div class="content-cover">' + (c.cover_url ? '<img src="' + c.cover_url + '">' : '') + srcBadge(c.source_type) + '<span class="duration">' + ZX.fmtDuration(c.duration_sec) + '</span></div><div class="content-body"><h4>' + ZX.escapeHtml(c.title) + '</h4><div class="meta"><span>' + ZX.escapeHtml(c.subject || '未分类') + '</span><span>·</span><span>' + ZX.escapeHtml(c.owner_name || '匿名') + '</span></div><div class="foot"><span class="badge green">已过审</span><span>' + (c.helpful || 0) + ' 人觉得有帮助</span></div></div></article>').join('');
+    grid.querySelectorAll('.content-card').forEach(el => el.addEventListener('click', () => open(Number(el.dataset.id))));
+  }
+  function open(id) {
+    const c = contents.find(x => x.id === id);
+    if (!c) return;
+    ZX.openModal('<div class="modal-head"><h3>' + ZX.escapeHtml(c.title) + '</h3><button class="icon-btn" data-close>✕</button></div>' +
+      '<div class="modal-body"><video controls autoplay style="width:100%;max-height:380px;background:#000;border-radius:12px" src="' + (c.file_url || '') + '"></video>' +
+      '<div class="row" style="margin-top:12px;gap:8px;flex-wrap:wrap">' + srcBadge(c.source_type) + '<span class="badge green">人工复核通过</span><span class="badge blue">' + ZX.escapeHtml(c.subject) + '</span></div>' +
+      '<p style="color:#4a5a70">' + ZX.escapeHtml(c.description || '') + '</p>' +
+      '<div class="ai-panel">知识点：' + ZX.escapeHtml(c.knowledge_point || '—') + '　|　' + ZX.escapeHtml(c.ai_summary || '已通过人工帧级复核') + '</div>' +
+      '<div class="row" style="margin-top:14px"><a class="btn primary sm" href="/upload">我也要交棒</a><a class="btn ghost sm" href="/seats">去自习</a></div></div>');
+  }
+  async function load() {
+    try {
+      const r = await ZX.api('/api/contents?status=approved');
+      contents = r.contents || [];
+      render();
+    } catch (e) { ZX.toast(e.message, 'err'); }
+  }
+  document.querySelectorAll('#subjectFilters .chip').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('#subjectFilters .chip').forEach(x => x.classList.remove('active'));
+    b.classList.add('active'); subject = b.dataset.s; render();
+  }));
+  load();
+</script>
+{% endblock %}

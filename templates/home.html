@@ -1,0 +1,159 @@
+{% extends 'base.html' %}
+{% from 'base.html' import icon %}
+{% block title %}今日{% endblock %}
+{% block page_title %}今日学习{% endblock %}
+{% block eyebrow %}习得 · 校园学习空间{% endblock %}
+{% block content %}
+<div class="stack">
+  <section class="hero">
+    <div class="eyebrow" style="color:#e8c98f">今日 · {{ now[:10] }}</div>
+    <h2>下午好，{{ user.name }}。</h2>
+    <p>找座、学习、卡住了、离座接棒——一次自习的每个阶段，都有对应的服务接着你。</p>
+    <div class="hero-actions">
+      <a class="btn primary lg" href="/seats">{{ icon('seat') }} 找个座位</a>
+      <a class="btn ghost lg" href="/pool">{{ icon('play') }} 去接力池看看</a>
+      <a class="btn ghost lg" href="/upload">{{ icon('upload') }} 交棒一条视频</a>
+    </div>
+  </section>
+
+  <div class="grid g4" id="statGrid">
+    <div class="stat"><div class="label">座位空闲</div><div class="value" id="stFree">—</div><div class="delta">实时 + 设备模拟</div></div>
+    <div class="stat"><div class="label">今日学习场次</div><div class="value" id="stSessions">—</div><div class="delta">完成即触发接棒</div></div>
+    <div class="stat"><div class="label">待复核内容</div><div class="value" id="stPending">—</div><div class="delta">AI 初筛 + 人工帧级</div></div>
+    <div class="stat"><div class="label">接棒有帮助率</div><div class="value" id="stHelpful">—<small>%</small></div><div class="delta">来自真实反馈</div></div>
+  </div>
+
+  <div class="grid" style="grid-template-columns:minmax(0,1.35fr) minmax(320px,.65fr)">
+    <div class="stack">
+      <section class="card" id="sessionCard">
+        <div class="card-head"><h3>当前场次</h3><span class="badge gray" id="sessionBadge">加载中</span></div>
+        <div class="card-body" id="sessionBody">
+          <div class="skeleton" style="height:80px"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h3>最近接棒</h3><a class="small muted" href="/messages">全部消息 →</a></div>
+        <div class="card-body" id="relayBody">
+          <div class="skeleton" style="height:72px"></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="card">
+        <div class="card-head"><h3>今日建议</h3><span class="badge amber">有依据</span></div>
+        <div class="card-body" id="adviceBody">
+          <div class="list-item"><div class="thumb">{{ icon('sun') }}</div><div class="grow"><b>先看一条 3 分钟视频</b><small>你上次卡在 ε-δ，先补直觉再做題</small></div></div>
+          <div class="list-item"><div class="thumb">{{ icon('clock') }}</div><div class="grow"><b>50 + 10 节奏</b><small>你近 7 天平均专注 48 分钟</small></div></div>
+          <div class="list-item"><div class="thumb">{{ icon('seat') }}</div><div class="grow"><b>A 区靠窗还空着</b><small>A-06 有空、有电源，步行 1 分 40 秒</small></div></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h3>本场流水线</h3><a class="small muted" href="/workflow">看运行轨迹 →</a></div>
+        <div class="card-body">
+          <div class="pipeline" id="pipeline">
+            <div class="pstep done"><span class="pdot">1</span>预约</div><span class="pline"></span>
+            <div class="pstep done"><span class="pdot">2</span>签到</div><span class="pline"></span>
+            <div class="pstep active"><span class="pdot">3</span>学习</div><span class="pline"></span>
+            <div class="pstep"><span class="pdot">4</span>结束</div><span class="pline"></span>
+            <div class="pstep"><span class="pdot">5</span>接棒</div>
+          </div>
+          <div class="divider"></div>
+          <div class="small muted">结束或预约到期后，工作流会聚合场次上下文，从接力池匹配已过审视频。</div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  let timer = null;
+  function renderSession(s) {
+    const body = document.getElementById('sessionBody');
+    const badge = document.getElementById('sessionBadge');
+    if (!s) {
+      badge.className = 'badge gray'; badge.textContent = '暂无进行中';
+      body.innerHTML = '<div class="empty"><div class="empty-icon">' + '🪑' + '</div><b>还没有进行中的学习</b><span>先找一个座位，预约后签到开始。</span><div style="margin-top:14px"><a class="btn primary" href="/seats">去找座位</a></div></div>';
+      return;
+    }
+    badge.className = 'badge red'; badge.textContent = '学习中';
+    const start = new Date(s.started_at.replace(' ', 'T'));
+    const tick = () => {
+      const min = Math.max(0, Math.floor((Date.now() - start.getTime()) / 60000));
+      const el = document.getElementById('liveTimer');
+      if (el) el.textContent = String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0');
+    };
+    body.innerHTML = '<div class="row between wrap">' +
+      '<div><div class="h3">' + ZX.escapeHtml(s.subject || '自主学习') + '</div>' +
+      '<div class="muted small">' + ZX.escapeHtml(s.seat_code || '') + ' · ' + ZX.escapeHtml(s.zone || '') + ' · 开始于 ' + ZX.fmtDate(s.started_at) + '</div></div>' +
+      '<div style="text-align:right"><div class="mono" id="liveTimer" style="font-size:26px;font-weight:700">00:00</div><div class="small muted">已学习</div></div></div>' +
+      '<div class="divider"></div>' +
+      '<div class="row wrap"><a class="btn primary sm" href="/learn">进入学习</a>' +
+      '<button class="btn ghost sm" id="endNow">结束学习</button>' +
+      '<button class="btn ghost sm" id="demoExpire">演示：预约到期</button></div>';
+    tick(); if (timer) clearInterval(timer); timer = setInterval(tick, 1000);
+    document.getElementById('endNow').addEventListener('click', () => endSession(s.reservation_id));
+    document.getElementById('demoExpire').addEventListener('click', demoExpire);
+  }
+  async function endSession(rid) {
+    if (!confirm('结束本场学习？结束后会自动触发接棒匹配。')) return;
+    try {
+      await ZX.api('/api/bookings/' + rid + '/end', { method: 'POST' });
+      ZX.toast('已结束，正在为你匹配学习视频');
+      setTimeout(load, 900);
+    } catch (e) { ZX.toast(e.message, 'err'); }
+  }
+  async function demoExpire() {
+    try {
+      await ZX.api('/api/demo/expire', { method: 'POST' });
+      ZX.toast('已模拟预约到期，自动结束并触发接棒');
+      setTimeout(load, 900);
+    } catch (e) { ZX.toast(e.message, 'err'); }
+  }
+  function renderRelay(pushes) {
+    const body = document.getElementById('relayBody');
+    if (!pushes || !pushes.length) {
+      body.innerHTML = '<div class="empty"><div class="empty-icon">🎬</div><b>还没有接棒记录</b><span>完成一次自习后，这里会出现为你匹配的视频。</span></div>';
+      return;
+    }
+    const p = pushes[0];
+    body.innerHTML = '<div class="row" style="gap:14px;align-items:flex-start">' +
+      '<div class="thumb" style="width:96px;height:64px;border-radius:10px;overflow:hidden">' + (p.cover_url ? '<img src="' + p.cover_url + '">' : '') + '</div>' +
+      '<div style="flex:1;min-width:0"><div class="row between"><b>' + ZX.escapeHtml(p.title) + '</b><span class="badge green">已过审</span></div>' +
+      '<div class="small muted" style="margin:4px 0">' + ZX.escapeHtml(p.reason || '') + '</div>' +
+      '<div class="row"><button class="btn primary sm" data-push="' + p.id + '">看接力卡</button><span class="small muted">' + (p.feedback === 'helpful' ? '已反馈：有帮助' : '') + '</span></div></div></div>';
+    body.querySelector('[data-push]').addEventListener('click', () => openRelay(p));
+  }
+  async function openRelay(p) {
+    try { await ZX.api('/api/relay/' + p.id + '/open', { method: 'POST' }); } catch (e) {}
+    ZX.openModal('<div class="modal-head"><h3>学习接力 · 接棒卡</h3><button class="icon-btn" data-close>✕</button></div>' +
+      '<div class="modal-body"><div class="card" style="overflow:hidden;margin-bottom:14px"><video controls autoplay style="width:100%;max-height:360px;background:#000" src="' + (p.file_url || '') + '"></video></div>' +
+      '<div class="row between"><div><div class="h3">' + ZX.escapeHtml(p.title) + '</div><div class="small muted">' + ZX.escapeHtml(p.reason || '') + '</div></div><span class="badge green">人工复核通过</span></div>' +
+      '<div class="divider"></div><div class="row"><b class="small">这条视频对你有帮助吗？</b><button class="btn teal sm" data-fb="helpful">有帮助</button><button class="btn ghost sm" data-fb="unhelpful">没帮助</button></div></div>');
+    document.querySelectorAll('[data-fb]').forEach(b => b.addEventListener('click', async () => {
+      try { await ZX.api('/api/relay/' + p.id + '/feedback', { method: 'POST', body: { value: b.dataset.fb } }); ZX.toast('反馈已记录，下次会更准'); ZX.closeModal(); load(); } catch (e) { ZX.toast(e.message, 'err'); }
+    }));
+  }
+  async function load() {
+    try {
+      const st = (await ZX.api('/api/stats')).stats;
+      document.getElementById('stFree').textContent = st.seats_free + '/' + st.seats_total;
+      document.getElementById('stSessions').textContent = st.sessions_today;
+      document.getElementById('stPending').textContent = st.pending_review;
+      document.getElementById('stHelpful').innerHTML = st.helpful_rate + '<small>%</small>';
+    } catch (e) {}
+    try {
+      const cur = await ZX.api('/api/sessions/current');
+      renderSession(cur.session);
+    } catch (e) { renderSession(null); }
+    try {
+      const r = await ZX.api('/api/relay/pending');
+      renderRelay(r.pushes);
+    } catch (e) { renderRelay([]); }
+  }
+  load();
+</script>
+{% endblock %}

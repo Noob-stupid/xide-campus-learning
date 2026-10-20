@@ -1,0 +1,145 @@
+{% extends 'base.html' %}
+{% from 'base.html' import icon %}
+{% block title %}我的{% endblock %}
+{% block page_title %}我的学习档案{% endblock %}
+{% block eyebrow %}不是社交主页，是你的学习档案{% endblock %}
+{% block content %}
+<div class="profile-cover">
+  <div class="cover-note">LEARNING ARCHIVE · 2026</div>
+</div>
+<div class="profile-head">
+  <div class="avatar lg" id="avatar">{{ user.name[:1] }}</div>
+  <div class="profile-id">
+    <div class="row" style="gap:10px;flex-wrap:wrap"><h2 id="pName">{{ user.name }}</h2><span class="badge blue" id="pRole">学生</span></div>
+    <div class="meta" id="pMeta">{{ user.college }}</div>
+    <div class="sig" id="pSig">{{ user.signature }}</div>
+    <div class="profile-tags" id="pTags"></div>
+  </div>
+  <div class="row" style="padding-bottom:10px;flex-wrap:wrap">
+    <button class="btn ghost sm" id="editBtn">{{ icon('user') }} 编辑资料</button>
+    <button class="btn primary sm" id="shareBtn">{{ icon('spark') }} 分享学习名片</button>
+  </div>
+</div>
+
+<div class="profile-stats" id="pStats">
+  <div class="ps"><b id="psSessions">—</b><small>学习场次</small></div>
+  <div class="ps"><b id="psMinutes">—</b><small>专注时长</small></div>
+  <div class="ps"><b id="psContents">—</b><small>我的交棒</small></div>
+  <div class="ps"><b id="psRelays">—</b><small>接棒记录</small></div>
+  <div class="ps"><b id="psHelpful">—</b><small>有帮助率</small></div>
+</div>
+
+<div class="tabs" id="profileTabs">
+  <button class="tab active" data-t="sessions">我的场次</button>
+  <button class="tab" data-t="contents">我的交棒</button>
+  <button class="tab" data-t="relays">接棒记录</button>
+  <button class="tab" data-t="timeline">学习轨迹</button>
+  <button class="tab" data-t="settings">设置</button>
+</div>
+
+<div class="tab-panel active" id="tab-sessions">
+  <div class="grid g2" id="sessionsGrid"><div class="skeleton" style="height:90px"></div></div>
+</div>
+<div class="tab-panel" id="tab-contents">
+  <div class="content-grid" id="contentsGrid"></div>
+</div>
+<div class="tab-panel" id="tab-relays">
+  <div class="grid g2" id="relaysGrid"></div>
+</div>
+<div class="tab-panel" id="tab-timeline">
+  <section class="card"><div class="card-body" id="timelineBox"></div></section>
+</div>
+<div class="tab-panel" id="tab-settings">
+  <section class="card" style="max-width:620px">
+    <div class="card-head"><h3>通知与隐私</h3><span class="small muted">演示设置</span></div>
+    <div class="card-body stack">
+      <label class="check-item"><input type="checkbox" checked> 学习结束/预约到期时，接收接棒提醒</label>
+      <label class="check-item"><input type="checkbox" checked> 只在 08:00–23:00 推送，避免打扰</label>
+      <label class="check-item"><input type="checkbox"> 允许我的交棒内容被推荐给同校同学</label>
+      <div class="field"><label>免打扰时段</label><input class="input" value="23:00 – 08:00"></div>
+      <button class="btn primary sm" onclick="ZX.toast('设置已保存（演示）')">保存设置</button>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  let P = null;
+  const roleName = r => ({student:'学生',teacher:'教师',reviewer:'审核员',admin:'管理员'}[r] || r);
+  function render(data) {
+    P = data;
+    const u = data.user, st = data.stats;
+    document.getElementById('pName').textContent = u.name;
+    document.getElementById('pRole').textContent = roleName(u.role);
+    document.getElementById('pMeta').textContent = u.college || '未填写学院';
+    document.getElementById('pSig').textContent = u.signature || '写一句你的学习签名。';
+    document.getElementById('avatar').textContent = (u.name || '?')[0];
+    document.getElementById('psSessions').textContent = st.sessions;
+    document.getElementById('psMinutes').textContent = Math.round(st.minutes / 60) + 'h';
+    document.getElementById('psContents').textContent = st.contents;
+    document.getElementById('psRelays').textContent = st.relays;
+    document.getElementById('psHelpful').textContent = st.helpful_rate + '%';
+    const tags = (u.interests || '').split(',').filter(Boolean).slice(0, 2);
+    const subjects = {};
+    (data.sessions || []).forEach(s => { if (s.subject) subjects[s.subject] = (subjects[s.subject] || 0) + 1; });
+    const top = Object.keys(subjects).sort((a, b) => subjects[b] - subjects[a])[0];
+    const all = tags.concat(top ? [top + '探索者'] : ['新同学']).concat(data.sessions.length ? ['连续学习'] : []);
+    document.getElementById('pTags').innerHTML = all.map(t => '<span class="tag">' + ZX.escapeHtml(t) + '</span>').join('');
+    renderSessions(data.sessions);
+    renderContents(data.contents);
+    renderRelays(data.pushes);
+    renderTimeline(data);
+  }
+  function renderSessions(list) {
+    const box = document.getElementById('sessionsGrid');
+    if (!list.length) { box.innerHTML = '<div class="card" style="grid-column:1/-1"><div class="empty"><div class="empty-icon">📚</div><b>还没有学习场次</b><span>去空间预约并签到，开始你的第一场。</span><div style="margin-top:14px"><a class="btn primary" href="/seats">去找座位</a></div></div></div>'; return; }
+    box.innerHTML = list.map(s => {
+      const d = (s.started_at || '').slice(0, 10), day = d.slice(8, 10), mon = d.slice(5, 7);
+      return '<div class="session-card"><div class="date"><b>' + day + '</b><small>' + mon + ' 月</small></div><div class="info"><div class="row between"><b>' + ZX.escapeHtml(s.subject || '自主学习') + '</b>' + ZX.statusBadge(s.status === 'relayed' ? 'completed' : s.status) + '</div><small>' + ZX.escapeHtml(s.seat_code || '') + ' · ' + ZX.escapeHtml(s.zone || '') + ' · ' + ZX.fmtMinutes(s.duration_min) + '</small>' + (s.stuck_points ? '<small style="display:block;color:#98621a">卡点：' + ZX.escapeHtml(s.stuck_points) + '</small>' : '') + '</div></div>';
+    }).join('');
+  }
+  function renderContents(list) {
+    const box = document.getElementById('contentsGrid');
+    if (!list.length) { box.innerHTML = '<div class="card" style="grid-column:1/-1"><div class="empty"><div class="empty-icon">🎬</div><b>还没有交棒</b><span>把你刚学会的讲给下一个同学听。</span><div style="margin-top:14px"><a class="btn primary" href="/upload">去交棒</a></div></div></div>'; return; }
+    box.innerHTML = list.map(c => '<article class="content-card"><div class="content-cover">' + (c.cover_url ? '<img src="' + c.cover_url + '">' : '') + '<span class="duration">' + ZX.fmtDuration(c.duration_sec) + '</span></div><div class="content-body"><h4>' + ZX.escapeHtml(c.title) + '</h4><div class="meta">' + ZX.escapeHtml(c.subject || '') + '</div><div class="foot">' + ZX.statusBadge(c.status) + '<span>' + (c.helpful || 0) + ' 有帮助</span></div></div></article>').join('');
+  }
+  function renderRelays(list) {
+    const box = document.getElementById('relaysGrid');
+    if (!list.length) { box.innerHTML = '<div class="card" style="grid-column:1/-1"><div class="empty"><div class="empty-icon">📩</div><b>还没有接棒</b><span>完成一次自习后，系统会为你匹配已过审视频。</span></div></div>'; return; }
+    box.innerHTML = list.map(p => '<div class="card card-pad"><div class="row between"><b>' + ZX.escapeHtml(p.title) + '</b><span class="badge green">已过审</span></div><div class="small muted" style="margin:6px 0">' + ZX.escapeHtml(p.reason || '') + '</div><div class="row between"><span class="small muted">' + ZX.fmtDate(p.created_at) + '</span><span class="badge ' + (p.feedback === 'helpful' ? 'teal' : 'gray') + '">' + (p.feedback === 'helpful' ? '有帮助' : p.feedback === 'unhelpful' ? '没帮助' : '待反馈') + '</span></div></div>').join('');
+  }
+  function renderTimeline(data) {
+    const items = [];
+    (data.sessions || []).forEach(s => items.push({ t: s.started_at, icon: '📚', title: '学习 · ' + (s.subject || '自主学习'), sub: (s.seat_code || '') + ' · ' + ZX.fmtMinutes(s.duration_min) }));
+    (data.contents || []).forEach(c => items.push({ t: c.created_at, icon: '🎬', title: '交棒 · ' + c.title, sub: c.subject + ' · ' + ({approved:'已入池',pending_review:'待复核',rejected:'未通过',processing:'处理中'}[c.status] || c.status) }));
+    (data.pushes || []).forEach(p => items.push({ t: p.created_at, icon: '📩', title: '接棒 · ' + p.title, sub: p.reason || '' }));
+    items.sort((a, b) => String(b.t).localeCompare(String(a.t)));
+    const box = document.getElementById('timelineBox');
+    if (!items.length) { box.innerHTML = '<div class="empty"><b>还没有轨迹</b><span>学习和交棒会在这里留下记录。</span></div>'; return; }
+    box.innerHTML = items.slice(0, 30).map(x => '<div class="list-item"><div class="thumb" style="background:#f4f6f9">' + x.icon + '</div><div class="grow"><b>' + ZX.escapeHtml(x.title) + '</b><small>' + ZX.escapeHtml(x.sub) + ' · ' + ZX.fmtDate(x.t) + '</small></div></div>').join('');
+  }
+  document.querySelectorAll('#profileTabs .tab').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('#profileTabs .tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    document.getElementById('tab-' + b.dataset.t).classList.add('active');
+  }));
+  document.getElementById('editBtn').addEventListener('click', () => {
+    if (!P) return;
+    ZX.openModal('<div class="modal-head"><h3>编辑学习档案</h3><button class="icon-btn" data-close>✕</button></div><div class="modal-body"><div class="form"><div class="field"><label>学院</label><input class="input" id="eCollege" value="' + ZX.escapeHtml(P.user.college || '') + '"></div><div class="field"><label>学习签名</label><input class="input" id="eSig" value="' + ZX.escapeHtml(P.user.signature || '') + '"></div><div class="field"><label>兴趣方向（逗号分隔）</label><input class="input" id="eInt" value="' + ZX.escapeHtml(P.user.interests || '') + '"></div><button class="btn primary" id="saveProfile">保存</button></div></div>');
+    document.getElementById('saveProfile').addEventListener('click', async () => {
+      try { await ZX.api('/api/profile/update', { method: 'POST', body: { college: document.getElementById('eCollege').value, signature: document.getElementById('eSig').value, interests: document.getElementById('eInt').value } }); ZX.closeModal(); ZX.toast('已保存'); load(); }
+      catch (e) { ZX.toast(e.message, 'err'); }
+    });
+  });
+  document.getElementById('shareBtn').addEventListener('click', () => {
+    if (!P) return;
+    const st = P.stats;
+    ZX.openModal('<div class="modal-head"><h3>学习名片</h3><button class="icon-btn" data-close>✕</button></div><div class="modal-body"><div style="background:linear-gradient(135deg,#0f2a4a,#24547f);color:#fff;border-radius:18px;padding:26px;position:relative;overflow:hidden"><div style="font-size:11px;letter-spacing:.16em;color:#e8c98f">习得 · 学习名片</div><div style="font-size:24px;font-weight:700;margin:8px 0 2px">' + ZX.escapeHtml(P.user.name) + '</div><div style="color:#c6d6e8;font-size:12px">' + ZX.escapeHtml(P.user.college || '') + '</div><div style="display:flex;gap:22px;margin-top:18px"><div><b style="font-size:22px">' + Math.round(st.minutes / 60) + 'h</b><div style="font-size:11px;color:#c6d6e8">本周专注</div></div><div><b style="font-size:22px">' + st.sessions + '</b><div style="font-size:11px;color:#c6d6e8">学习场次</div></div><div><b style="font-size:22px">' + st.contents + '</b><div style="font-size:11px;color:#c6d6e8">交棒</div></div><div><b style="font-size:22px">' + st.helpful_rate + '%</b><div style="font-size:11px;color:#c6d6e8">有帮助率</div></div></div><div style="margin-top:18px;font-size:12px;color:#c6d6e8">' + ZX.escapeHtml(P.user.signature || '把每一次自习，变成下一次的底气。') + '</div></div><div class="small muted" style="margin-top:12px">截图保存即可分享；不含任何社交指标。</div></div>');
+  });
+  async function load() {
+    try { render(await ZX.api('/api/profile')); } catch (e) { ZX.toast(e.message, 'err'); }
+  }
+  load();
+</script>
+{% endblock %}

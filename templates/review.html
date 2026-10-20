@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% from 'base.html' import icon %}
+{% block title %}审核{% endblock %}
+{% block page_title %}审核 · 待复核内容{% endblock %}
+{% block eyebrow %}AI 只标疑点，人来拍板{% endblock %}
+{% block content %}
+<div class="stack">
+  <div class="row between wrap">
+    <div class="chips">
+      <span class="badge amber">待复核 <b id="qCount">—</b></span>
+      <span class="badge gray">通过后进入接力池</span>
+    </div>
+    <a class="btn ghost sm" href="/workflow">看交棒流水线 →</a>
+  </div>
+  <div class="review-queue" id="queue">
+    <div class="skeleton" style="height:100px"></div>
+    <div class="skeleton" style="height:100px"></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  async function load() {
+    try {
+      const r = await ZX.api('/api/review/queue');
+      const list = r.contents || [];
+      document.getElementById('qCount').textContent = list.length;
+      const box = document.getElementById('queue');
+      if (!list.length) {
+        box.innerHTML = '<div class="card"><div class="empty"><div class="empty-icon">🛡</div><b>队列空了</b><span>所有交棒内容都已完成帧级复核。</span><div style="margin-top:14px"><a class="btn primary" href="/pool">去接力池看看</a></div></div></div>';
+        return;
+      }
+      box.innerHTML = list.map(c => '<div class="review-item"><div class="cover">' + (c.cover_url ? '<img src="' + c.cover_url + '">' : '') + '</div><div class="info"><div class="row between"><b>' + ZX.escapeHtml(c.title) + '</b><span class="badge ' + (c.ai_risk >= 0.55 ? 'red' : 'amber') + '">AI 风险 ' + Number(c.ai_risk || 0).toFixed(2) + '</span></div><div class="small muted">' + ZX.escapeHtml(c.subject || '未分类') + ' · ' + ZX.escapeHtml(c.owner_name || '匿名') + ' · ' + ZX.fmtDate(c.created_at) + ' · ' + ZX.fmtDuration(c.duration_sec) + '</div><div class="small muted" style="margin-top:4px">' + ZX.escapeHtml(c.ai_summary || '') + '</div></div><a class="btn primary sm" href="/review/' + c.id + '">进入复核</a></div>').join('');
+    } catch (e) { ZX.toast(e.message, 'err'); }
+  }
+  load();
+</script>
+{% endblock %}
