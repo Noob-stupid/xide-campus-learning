@@ -4,9 +4,8 @@
 {% block page_title %}我的学习档案{% endblock %}
 {% block eyebrow %}不是社交主页，是你的学习档案{% endblock %}
 {% block content %}
-<div class="profile-cover" id="profileCover">
+<div class="profile-cover" id="profileCover" role="button" tabindex="0" title="点击更换封面">
   <div class="cover-note">LEARNING ARCHIVE · 2026</div>
-  <button class="btn ghost sm" id="coverBtn" style="position:absolute;right:16px;bottom:14px;z-index:2">更换封面</button>
 </div>
 <div class="profile-head">
   <div class="avatar lg" id="avatar" title="点击更换头像" style="cursor:pointer;overflow:hidden">{{ user.name[:1] }}</div>
@@ -19,6 +18,7 @@
   </div>
   <div class="row" style="padding-bottom:10px;flex-wrap:wrap">
     <button class="btn ghost sm" id="editBtn">{{ icon('user') }} 编辑资料</button>
+    <button class="btn ghost sm" id="coverBtn">{{ icon('upload') }} 更换封面</button>
     <button class="btn primary sm" id="shareBtn">{{ icon('spark') }} 分享学习名片</button>
   </div>
 </div>
@@ -170,7 +170,9 @@
     input.value = '';
   }
   document.getElementById('avatar').addEventListener('click', () => document.getElementById('avatarFile').click());
-  document.getElementById('coverBtn').addEventListener('click', () => document.getElementById('coverFile').click());
+  document.getElementById('coverBtn').addEventListener('click', e => { e.stopPropagation(); document.getElementById('coverFile').click(); });
+  document.getElementById('profileCover').addEventListener('click', () => document.getElementById('coverFile').click());
+  document.getElementById('profileCover').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); document.getElementById('coverFile').click(); } });
   document.getElementById('avatarFile').addEventListener('change', e => uploadProfile('avatar', e.target));
   document.getElementById('coverFile').addEventListener('change', e => uploadProfile('cover', e.target));
 

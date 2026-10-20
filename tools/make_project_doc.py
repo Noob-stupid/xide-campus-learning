@@ -2,6 +2,7 @@
 """把 docs/项目详细介绍.md 转成适合提交的 Word 文档。"""
 import os
 import re
+import sys
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -9,8 +10,8 @@ from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = os.path.join(ROOT, 'docs', '项目详细介绍.md')
-OUT = os.path.join(ROOT, 'docs', '习得-项目详细介绍.docx')
+SRC = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'docs', '项目详细介绍.md')
+OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.join(ROOT, 'docs', '习得-项目详细介绍.docx')
 
 FONT = '微软雅黑'
 INK = RGBColor(0x18, 0x19, 0x1C)

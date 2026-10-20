@@ -73,7 +73,8 @@ python app.py               # http://127.0.0.1:5820
 |---|
 | ![室外导航](docs/screenshots/09-outdoor.png) |
 
-> 完整介绍见 [docs/项目详细介绍.md](docs/项目详细介绍.md)；Word 版：[docs/习得-项目详细介绍.docx](docs/习得-项目详细介绍.docx)。
+> 完整介绍：[docs/项目详细介绍.md](docs/项目详细介绍.md)；Word 版：[docs/习得-项目详细介绍.docx](docs/习得-项目详细介绍.docx)。
+> 交接文档：[docs/交接文档.md](docs/交接文档.md)；Word 版：[docs/习得-交接文档.docx](docs/习得-交接文档.docx)。
 
 ## 架构
 

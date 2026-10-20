@@ -82,6 +82,9 @@ def media_url(p):
         return '/media/' + s[i + len(marker):]
     if s.startswith('media/'):
         return '/' + s
+    _up = os.path.abspath(UPLOAD_DIR).replace('\\', '/')
+    if s.startswith(_up + '/'):
+        return '/uploads/' + s[len(_up) + 1:]
     if not s.startswith('/') and not s.startswith('http'):
         return '/media/' + s.lstrip('/')
     return s
@@ -791,6 +794,12 @@ def demo_login(name):
     if not nxt.startswith('/'):
         nxt = '/'
     return redirect(nxt)
+
+
+@app.route('/uploads/<path:filename>')
+@login_required
+def uploaded_file(filename):
+    return send_from_directory(UPLOAD_DIR, filename, conditional=True)
 
 
 @app.route('/media/<path:filename>')
