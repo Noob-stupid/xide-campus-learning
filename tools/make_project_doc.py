@@ -79,7 +79,7 @@ def main():
 
     header = sec.header.paragraphs[0]
     header.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    hr = header.add_run('习得 · 校园学习空间智能体　|　项目详细介绍')
+    hr = header.add_run('习得 · 校园学习空间 AI 创新应用　|　项目详细介绍')
     set_font(hr, size=8.5, color=MUTED)
 
     footer = sec.footer.paragraphs[0]
