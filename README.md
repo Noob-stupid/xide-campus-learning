@@ -162,3 +162,12 @@ python -m pytest -q
 ## License
 
 MIT，见 `LICENSE`。
+
+## HarmonyOS 壳
+
+`mobile-harmony/` 是 HarmonyOS NEXT 的 Web 壳工程：一个 Web 组件加载习得 HTTPS 页面，带启动页、返回键、定位权限和基础错误页。
+
+- 打开方式：DevEco Studio 5.0+，Open Project 选择 `mobile-harmony/`；
+- 先改 `entry/src/main/ets/pages/Index.ets` 里的 `webUrl` 为已部署的 HTTPS 地址；
+- 当前机器未安装 DevEco Studio / HarmonyOS SDK，因此这里只完成源码，未编译 HAP；
+- 原生通知/扫码/震动桥接见 `docs/移动端功能交接文档.md`。

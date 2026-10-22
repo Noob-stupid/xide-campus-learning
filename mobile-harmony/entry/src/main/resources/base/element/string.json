@@ -1,0 +1,8 @@
+{
+  "string": [
+    { "name": "module_desc", "value": "习得 · 校园学习空间 AI 创新应用" },
+    { "name": "EntryAbility_desc", "value": "习得 Web 应用入口" },
+    { "name": "EntryAbility_label", "value": "习得" },
+    { "name": "location_reason", "value": "用于室外导航定位当前位置" }
+  ]
+}
