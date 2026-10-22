@@ -77,6 +77,7 @@ python app.py               # http://127.0.0.1:5820
 
 > 完整介绍：[docs/项目详细介绍.md](docs/项目详细介绍.md)；Word 版：[docs/习得-项目详细介绍.docx](docs/习得-项目详细介绍.docx)。
 > 交接文档：[docs/交接文档.md](docs/交接文档.md)；Word 版：[docs/习得-交接文档.docx](docs/习得-交接文档.docx)。
+> 移动端交接：[docs/移动端功能交接文档.md](docs/移动端功能交接文档.md)；Word 版：[docs/习得-移动端功能交接文档.docx](docs/习得-移动端功能交接文档.docx)。
 
 ## 架构
 
