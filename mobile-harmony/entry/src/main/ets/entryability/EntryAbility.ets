@@ -8,19 +8,18 @@ const TAG: string = 'XideEntryAbility';
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     hilog.info(0x0000, TAG, 'onCreate');
-    // 初始化 API 客户端（读取持久化的会话 Cookie）
-    Api.init(this.context).then(() => {
-      hilog.info(0x0000, TAG, 'Api initialized, hasCookie=%{public}s', Api.hasCookie().toString());
-    });
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
-    windowStage.loadContent('pages/Index', (err) => {
-      if (err.code) {
-        hilog.error(0x0000, TAG, 'loadContent failed: %{public}s', JSON.stringify(err));
-        return;
-      }
-      hilog.info(0x0000, TAG, 'loadContent succeeded');
+    // 必须先读完持久化 Cookie，再打开 Index；否则 Index 会把已登录用户误判成未登录。
+    Api.init(this.context).then(() => {
+      windowStage.loadContent('pages/Index', (err) => {
+        if (err.code) {
+          hilog.error(0x0000, TAG, 'loadContent failed: %{public}s', JSON.stringify(err));
+          return;
+        }
+        hilog.info(0x0000, TAG, 'loadContent succeeded, hasCookie=%{public}s', Api.hasCookie().toString());
+      });
     });
   }
 }

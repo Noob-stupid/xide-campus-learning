@@ -227,6 +227,16 @@ export struct ProfileView {
             }, (s: StudySession) => s.id.toString())
           }
 
+          Button('网页编辑头像 / 封面')
+            .width('100%')
+            .height(40)
+            .backgroundColor('#EEF4FB')
+            .fontColor(Theme.PRIMARY)
+            .margin({ top: 8 })
+            .onClick(() => {
+              router.pushUrl({ url: 'pages/WebShell', params: { path: '/profile' } });
+            })
+
           Button('退出登录')
             .width('100%')
             .height(44)

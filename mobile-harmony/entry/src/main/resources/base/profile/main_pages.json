@@ -4,6 +4,7 @@
     "pages/Login",
     "pages/Main",
     "pages/NavPage",
-    "pages/WebShell"
+    "pages/WebShell",
+    "pages/OutdoorPage"
   ]
 }

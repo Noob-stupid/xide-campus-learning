@@ -269,10 +269,12 @@ export class Api {
   }
 
   // ---------------- 室外 / 统计 ----------------
-  static async outdoor(building: string, lat: number, lng: number): Promise<OutdoorResp> {
-    const text: string = await Api.call(http.RequestMethod.GET,
-      '/api/outdoor?building=' + encodeURIComponent(building) +
-        '&lat=' + lat.toString() + '&lng=' + lng.toString());
+  static async outdoor(building: string, lat?: number, lng?: number): Promise<OutdoorResp> {
+    let path: string = '/api/outdoor?building=' + encodeURIComponent(building);
+    if (lat !== undefined && lng !== undefined) {
+      path += '&lat=' + lat.toString() + '&lng=' + lng.toString();
+    }
+    const text: string = await Api.call(http.RequestMethod.GET, path);
     return JSON.parse(text) as OutdoorResp;
   }
 

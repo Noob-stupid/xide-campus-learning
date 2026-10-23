@@ -1,19 +1,26 @@
 import { webview } from '@kit.ArkWeb';
+import { BASE_URL } from '../net/Api';
+import { router } from '@kit.ArkUI';
 
-/**
- * Web 兜底入口（可选）。
- * 原生版全部功能已用 ArkTS 实现；本页仅用于快速对照 Web 版或降级。
- * 需要在下面填部署好的 HTTPS 地址。
- */
+interface ShellParams {
+  path?: string;
+}
+
+/** Web 兜底页：交棒上传、头像/封面编辑等复杂表单可暂时走网页。 */
 @Entry
 @Component
 struct WebShell {
   controller: webview.WebviewController = new webview.WebviewController();
   @State loading: boolean = true;
   @State errorText: string = '';
+  private webUrl: string = BASE_URL;
 
-  // TODO: 部署 HTTPS 后填写习得公网地址
-  private readonly webUrl: string = 'https://xide.example.com';
+  aboutToAppear(): void {
+    const p = router.getParams() as ShellParams;
+    if (p && p.path) {
+      this.webUrl = BASE_URL + p.path;
+    }
+  }
 
   build() {
     Stack() {
@@ -51,10 +58,7 @@ struct WebShell {
 
       if (this.errorText.length > 0) {
         Column() {
-          Text(this.errorText)
-            .fontSize(16)
-            .fontColor('#FFFFFF')
-            .textAlign(TextAlign.Center)
+          Text(this.errorText).fontSize(16).fontColor('#FFFFFF').textAlign(TextAlign.Center)
           Button('重试')
             .margin({ top: 16 })
             .onClick(() => {

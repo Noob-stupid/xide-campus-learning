@@ -129,6 +129,13 @@ struct NavPage {
           .fontWeight(FontWeight.Bold)
           .fontColor(Theme.TEXT)
           .margin({ left: 10 })
+        Text('室外导航')
+          .fontSize(12)
+          .fontColor(Theme.PRIMARY)
+          .margin({ right: 10 })
+          .onClick(() => {
+            router.pushUrl({ url: 'pages/OutdoorPage' });
+          })
         Blank()
       }
       .width('100%')

@@ -2,6 +2,7 @@ import { Api, BASE_URL } from '../net/Api';
 import { Theme } from '../common/Theme';
 import { Fmt } from '../common/Format';
 import { ContentInfo } from '../model/Types';
+import { router } from '@kit.ArkUI';
 
 /** 接力池：只看已过审内容，按学科筛选 */
 @Component
@@ -64,11 +65,22 @@ export struct PoolView {
 
   build() {
     Column({ space: 12 }) {
-      Text('接力池')
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(Theme.TEXT)
-        .width('100%')
+      Row() {
+        Text('接力池')
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Theme.TEXT)
+        Blank()
+        Button('交棒')
+          .fontSize(12)
+          .height(30)
+          .backgroundColor(Theme.PRIMARY)
+          .fontColor(Theme.WHITE)
+          .onClick(() => {
+            router.pushUrl({ url: 'pages/WebShell', params: { path: '/upload' } });
+          })
+      }
+      .width('100%')
 
       Scroll() {
         Row() {
