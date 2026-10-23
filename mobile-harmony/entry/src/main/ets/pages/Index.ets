@@ -1,82 +1,63 @@
-import { webview } from '@kit.ArkWeb';
+import { Api } from '../net/Api';
+import { router } from '@kit.ArkUI';
+import { Theme } from '../common/Theme';
 
+/**
+ * 入口页：判断会话（持久化 Cookie），已登录进主界面，否则去登录。
+ */
 @Entry
 @Component
 struct Index {
-  controller: webview.WebviewController = new webview.WebviewController();
-  @State loading: boolean = true;
-  @State errorText: string = '';
+  @State tip: string = '正在进入习得…';
 
-  // TODO: 部署 HTTPS 后，把这里改成习得的公网地址。
-  private readonly webUrl: string = 'https://xide.example.com';
+  aboutToAppear(): void {
+    this.boot();
+  }
+
+  async boot(): Promise<void> {
+    if (Api.hasCookie()) {
+      try {
+        const r = await Api.me();
+        if (r.ok && r.user) {
+          AppStorage.setOrCreate('user', r.user);
+          router.replaceUrl({ url: 'pages/Main' });
+          return;
+        }
+      } catch (e) {
+        this.tip = '会话校验失败，请重新登录';
+      }
+    }
+    router.replaceUrl({ url: 'pages/Login' });
+  }
 
   build() {
     Stack() {
-      Web({ src: this.webUrl, controller: this.controller })
-        .width('100%')
-        .height('100%')
-        .domStorageAccess(true)
-        .fileAccess(true)
-        .geolocationAccess(true)
-        .zoomAccess(true)
-        .mixedMode(MixedMode.None)
-        .onPageBegin(() => {
-          this.loading = true;
-        })
-        .onPageEnd(() => {
-          this.loading = false;
-        })
-        .onErrorReceive((event) => {
-          this.loading = false;
-          if (event && event.error) {
-            this.errorText = '页面加载失败：' + event.error.errorInfo;
-          }
-        })
-        .onGeolocationShow((event) => {
-          // 生产环境建议只允许自己的域名。
-          event.geolocation.invoke(event.origin, true, false);
-        })
-
-      if (this.loading) {
-        Column() {
-          LoadingProgress().width(48).height(48)
-          Text('习得加载中…').fontSize(14).fontColor('#FFFFFF').margin({ top: 12 })
-        }
-        .width('100%')
-        .height('100%')
-        .justifyContent(FlexAlign.Center)
-        .backgroundColor('#0F2A4A')
+      Column({ space: 10 }) {
+        Text('习得')
+          .fontSize(42)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Theme.WHITE)
+        Text('从落座到学会 · 离座不放学')
+          .fontSize(14)
+          .fontColor('#B9C7DB')
       }
+      .width('100%')
+      .height('100%')
+      .justifyContent(FlexAlign.Center)
 
-      if (this.errorText.length > 0) {
-        Column() {
-          Text(this.errorText)
-            .fontSize(16)
-            .fontColor('#FFFFFF')
-            .textAlign(TextAlign.Center)
-          Button('重试')
-            .margin({ top: 16 })
-            .onClick(() => {
-              this.errorText = '';
-              this.controller.loadUrl(this.webUrl);
-            })
-        }
-        .width('100%')
-        .height('100%')
-        .justifyContent(FlexAlign.Center)
-        .backgroundColor('#0F2A4A')
-        .padding(24)
+      Column({ space: 10 }) {
+        LoadingProgress()
+          .width(26)
+          .height(26)
+          .color('#8FB3DE')
+        Text(this.tip)
+          .fontSize(12)
+          .fontColor('#8FB3DE')
       }
+      .offset({ y: 130 })
     }
     .width('100%')
     .height('100%')
-  }
-
-  onBackPress(): boolean {
-    if (this.controller.accessBackward()) {
-      this.controller.backward();
-      return true;
-    }
-    return false;
+    .backgroundColor(Theme.PRIMARY)
   }
 }

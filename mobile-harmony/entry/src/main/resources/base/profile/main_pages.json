@@ -1,5 +1,9 @@
 {
   "src": [
-    "pages/Index"
+    "pages/Index",
+    "pages/Login",
+    "pages/Main",
+    "pages/NavPage",
+    "pages/WebShell"
   ]
 }
