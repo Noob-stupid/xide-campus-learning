@@ -82,20 +82,23 @@ def trigger(session_id, trigger='manual'):
         top = rank_out.get('top')
         if top:
             def _push(c):
+                _reason = top.get('reason', '')
+                if top.get('ai_reason'):
+                    _reason = (_reason + ' · AI 推荐：' + str(top.get('ai_reason'))).strip(' ·')
                 push_id = db.execute(
                     'INSERT INTO relay_pushes(session_id,user_id,content_id,reason,score_json,created_at) '
                     'VALUES(?,?,?,?,?,?)',
-                    (session_id, sess['user_id'], top['id'], top.get('reason', ''),
+                    (session_id, sess['user_id'], top['id'], _reason,
                      db.dumps({'score': top.get('score'), 'breakdown': top.get('breakdown')}), db.now()))
                 db.execute(
                     'INSERT INTO messages(user_id,kind,title,body,payload,read,created_at) VALUES(?,?,?,?,?,0,?)',
                     (sess['user_id'], 'relay', '学习接力 · 为你找到一条视频',
                      '你刚在 %s 完成 %s 分钟学习。%s' % (sess.get('seat_code'), sess.get('duration_min'),
-                                                          top.get('reason') or '为你匹配到一条已过审学习视频'),
+                                                          _reason or '为你匹配到一条已过审学习视频'),
                      db.dumps({'push_id': push_id, 'content_id': top['id']}), db.now()))
                 db.execute("UPDATE study_sessions SET status='relayed', relay_content_id=?, pushed_at=? WHERE id=?",
                            (top['id'], db.now(), session_id))
-                return {'push_id': push_id, 'content_id': top['id'], 'reason': top.get('reason')}
+                return {'push_id': push_id, 'content_id': top['id'], 'reason': _reason}
             flow.step(run_id, 'decide', '推送决策', lambda c: {'decision': 'push'})
             flow.step(run_id, 'push', '推送接力卡', _push)
         else:

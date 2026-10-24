@@ -171,3 +171,15 @@ MIT，见 `LICENSE`。
 - 先改 `entry/src/main/ets/pages/Index.ets` 里的 `webUrl` 为已部署的 HTTPS 地址；
 - 当前机器未安装 DevEco Studio / HarmonyOS SDK，因此这里只完成源码，未编译 HAP；
 - 原生通知/扫码/震动桥接见 `docs/移动端功能交接文档.md`。
+
+## 可选 AI 层（MaaS / OpenAI 兼容）
+
+`services/llm.py` 已接 OpenAI 兼容通道，不影响未配置时的规则兜底：
+
+- `ZX_LLM_BASE_URL`：模型服务地址（含 /v1）
+- `ZX_LLM_API_KEY`：API Key
+- `ZX_LLM_MODEL`：模型名
+
+配置后用于：接棒候选重排、卡住了辅导追问、助手回复润色；未配置时全部走规则引擎。
+
+有帮助/没帮助反馈会计入内容质量，下一次接棒匹配按 0.85–1.15 的系数调整。

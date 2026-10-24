@@ -327,6 +327,14 @@ def answer(tutor_id, text):
                              'step': state['step']})
     prefix = '' if matched else '你的思路有一部分对，不过更关键的是：'
     explanation = prefix + current['explanation']
+    if not matched:
+        try:
+            from . import llm
+            _ai_hint = llm.tutor_hint(topic, current, txt)
+            if _ai_hint:
+                explanation = '先别急，我们换个更小的角度：' + _ai_hint
+        except Exception:
+            pass
     state['step'] += 1
 
     if state['step'] >= len(steps):

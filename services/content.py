@@ -616,4 +616,13 @@ def match_for_session(session, limit=5):
         })
 
     out.sort(key=lambda x: -x['score'])
-    return out[:limit]
+    top = out[:limit]
+    # 可选 AI 重排：只在配置了 LLM 时启用，失败自动回退规则排序。
+    try:
+        from . import llm
+        reranked = llm.rerank(session, top)
+        if reranked:
+            return reranked
+    except Exception:
+        pass
+    return top

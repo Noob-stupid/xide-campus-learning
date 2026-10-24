@@ -13,7 +13,7 @@ from flask import (Flask, abort, jsonify, redirect, render_template, request,
 import db
 import seed
 from config import (AMAP_JS_KEY, AMAP_SECURITY_CODE, HOST, MAX_FRAMES, MEDIA_DIR, PORT, SECRET_KEY, UPLOAD_DIR)
-from services import devices, flow, navigation, outdoor, relay, seats
+from services import devices, flow, llm, navigation, outdoor, relay, seats
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.secret_key = SECRET_KEY
@@ -734,7 +734,7 @@ def api_stats():
     return jsonify({'ok': True, 'stats': {
         'seats_total': total, 'seats_free': free, 'pending_review': pending,
         'contents_approved': approved, 'sessions_today': sessions, 'pushes': pushes,
-        'helpful_rate': rate}})
+        'helpful_rate': rate, 'ai_enabled': llm.available()}})
 
 
 # ---------------- devices ----------------

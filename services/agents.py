@@ -651,6 +651,15 @@ def ask(text, user_id, session_id=None):
         'agent_name': name,
         'matched_keywords': hits,
     }
+    try:
+        from . import llm
+        if llm.available() and intent in ('unknown', 'stuck'):
+            _ai_reply = llm.agent_reply(text, result)
+            if _ai_reply:
+                result['reply'] = _ai_reply
+                result['ai_generated'] = True
+    except Exception:
+        pass
     _log(user_id, session_id, intent, text, result['reply'], tool_calls)
     return result
 
