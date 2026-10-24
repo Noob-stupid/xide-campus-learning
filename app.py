@@ -12,12 +12,14 @@ from flask import (Flask, abort, jsonify, redirect, render_template, request,
 
 import db
 import seed
-from config import (AMAP_JS_KEY, AMAP_SECURITY_CODE, HOST, MAX_FRAMES, MEDIA_DIR, PORT, SECRET_KEY, UPLOAD_DIR)
+from config import (AMAP_JS_KEY, AMAP_SECURITY_CODE, DATA_DIR, HOST, MAX_FRAMES, MEDIA_DIR, PORT, SECRET_KEY, UPLOAD_DIR)
 from services import devices, flow, llm, navigation, outdoor, relay, seats
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.secret_key = SECRET_KEY
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
+
+db.init_db()
 
 NAV = [
     ('home', '今日', '/', 'home'),
@@ -29,6 +31,7 @@ NAV = [
     ('review', '审核', '/review', 'shield'),
     ('workflow', '编排', '/workflow', 'flow'),
     ('ai', 'AI 设置', '/admin/ai', 'spark'),
+    ('maps', '地图', '/admin/maps', 'seat'),
     ('profile', '我的', '/profile', 'user'),
 ]
 
@@ -36,7 +39,7 @@ ROLE_NAV = {
     'student': ['home', 'seats', 'nav', 'learn', 'pool', 'upload', 'profile'],
     'teacher': ['home', 'seats', 'nav', 'learn', 'pool', 'upload', 'profile'],
     'reviewer': ['home', 'nav', 'review', 'pool', 'workflow', 'profile'],
-    'admin': ['home', 'seats', 'nav', 'review', 'workflow', 'ai', 'pool', 'profile'],
+    'admin': ['home', 'seats', 'nav', 'review', 'workflow', 'ai', 'maps', 'pool', 'profile'],
 }
 
 
@@ -178,6 +181,13 @@ def ai_settings_page():
     return render_template('ai_settings.html', active='ai', ai_status=llm.status())
 
 
+
+@app.route('/admin/maps')
+@login_required
+@role_required('admin')
+def maps_page():
+    return render_template('admin_maps.html', active='maps')
+
 @app.route('/profile')
 @login_required
 def profile_page():
@@ -245,12 +255,81 @@ def api_seats():
     return jsonify({'ok': True, 'seats': rows})
 
 
+
+@app.route('/api/admin/floors/<int:fid>/plan', methods=['POST'])
+@login_required
+@role_required('admin')
+def api_admin_upload_floor_plan(fid):
+    floor = db.one('SELECT * FROM floors WHERE id=?', (fid,))
+    if not floor:
+        return jsonify({'ok': False, 'error': '楼层不存在'}), 404
+    f = request.files.get('file')
+    if not f or not f.filename:
+        return jsonify({'ok': False, 'error': '请选择楼层底图'}), 400
+    ext = os.path.splitext(f.filename)[1].lower()
+    if ext not in ('.png', '.jpg', '.jpeg', '.webp'):
+        return jsonify({'ok': False, 'error': '支持 png / jpg / jpeg / webp'}), 400
+    if request.content_length and request.content_length > 12 * 1024 * 1024:
+        return jsonify({'ok': False, 'error': '图片不能超过 12MB'}), 400
+    folder = os.path.join(MEDIA_DIR, 'maps')
+    os.makedirs(folder, exist_ok=True)
+    name = 'floor_%d_%s%s' % (fid, uuid.uuid4().hex[:8], ext)
+    path = os.path.join(folder, name)
+    f.save(path)
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            im.verify()
+            w, h = im.size
+    except Exception:
+        try:
+            os.remove(path)
+        except Exception:
+            pass
+        return jsonify({'ok': False, 'error': '不是有效图片'}), 400
+    rel = os.path.relpath(path, DATA_DIR).replace(os.sep, '/')
+    old = (floor['plan_path'] or '') if 'plan_path' in dict(floor) else ''
+    db.execute('UPDATE floors SET plan_path=?, plan_w=?, plan_h=? WHERE id=?', (rel, w, h, fid))
+    if old and old != rel:
+        old_abs = os.path.join(DATA_DIR, old.replace('/', os.sep))
+        try:
+            if os.path.exists(old_abs):
+                os.remove(old_abs)
+        except Exception:
+            pass
+    return jsonify({'ok': True, 'floor_id': fid, 'plan_url': media_url(rel), 'plan_path': rel, 'width': w, 'height': h})
+
+
+@app.route('/api/admin/floors/<int:fid>/plan', methods=['DELETE'])
+@login_required
+@role_required('admin')
+def api_admin_delete_floor_plan(fid):
+    floor = db.one('SELECT * FROM floors WHERE id=?', (fid,))
+    if not floor:
+        return jsonify({'ok': False, 'error': '楼层不存在'}), 404
+    old = dict(floor).get('plan_path') or ''
+    db.execute("UPDATE floors SET plan_path='' WHERE id=?", (fid,))
+    if old:
+        old_abs = os.path.join(DATA_DIR, old.replace('/', os.sep))
+        try:
+            if os.path.exists(old_abs):
+                os.remove(old_abs)
+        except Exception:
+            pass
+    return jsonify({'ok': True, 'floor_id': fid})
+
 @app.route('/api/floors')
 @login_required
 def api_floors():
-    rows = db.query('SELECT f.*, (SELECT COUNT(*) FROM seats s WHERE s.floor_id=f.id) AS seat_count '
+    rows = db.query('SELECT f.*, (SELECT COUNT(*) FROM seats s WHERE s.floor_id=f.id) AS seat_count, '
+                    '(SELECT COUNT(*) FROM nav_nodes n WHERE n.floor_id=f.id) AS nav_count '
                     'FROM floors f ORDER BY f.building, f.floor_no')
-    return jsonify({'ok': True, 'floors': [dict(x) for x in rows]})
+    out = []
+    for row in rows:
+        item = dict(row)
+        item['plan_url'] = media_url(item.get('plan_path'))
+        out.append(item)
+    return jsonify({'ok': True, 'floors': out})
 
 
 @app.route('/api/bookings', methods=['POST'])
@@ -354,6 +433,26 @@ def api_tutor_answer():
                         'resource': None, 'note': '规则兜底：%s' % e})
 
 
+
+@app.route('/api/learning/ask', methods=['POST'])
+@login_required
+def api_learning_ask():
+    u = current_user()
+    d = request.get_json(silent=True) or {}
+    text = (d.get('text') or '').strip()
+    if not text:
+        return jsonify({'ok': False, 'error': '先说说你遇到什么问题'}), 400
+    sess = seats.current_session(u['id'])
+    try:
+        from services import agents
+        out = agents.learning_ask(text, u['id'], sess['id'] if sess else None)
+        for c in out.get('contents', []):
+            c['file_url'] = media_url(c.get('file_path'))
+            c['cover_url'] = media_url(c.get('cover_path'))
+        return jsonify({'ok': True, **out})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+
 @app.route('/api/agent/ask', methods=['POST'])
 @login_required
 def api_agent_ask():
@@ -373,6 +472,10 @@ def api_agent_ask():
 
 
 # ---------------- contents / review ----------------
+
+def _sensor_envelope(data=None, message='ok', code=200):
+    return jsonify({'code': code, 'message': message, 'data': data if data is not None else {}}), (200 if code < 400 else code)
+
 
 def _content_dict(r):
     d = dict(r)
@@ -797,12 +900,34 @@ def api_devices_simulate():
         return jsonify({'ok': False, 'error': str(e)}), 400
 
 
+
+@app.route('/api/sensor/device/register', methods=['POST'])
+def api_sensor_device_register():
+    d = request.get_json(silent=True) or {}
+    try:
+        return _sensor_envelope(devices.register_protocol(d.get('device_id')))
+    except Exception as e:
+        return _sensor_envelope(None, str(e), 400)
+
+
+@app.route('/api/sensor/device_config')
+def api_sensor_device_config():
+    try:
+        return _sensor_envelope(devices.protocol_config(request.args.get('device_id', '')))
+    except Exception as e:
+        return _sensor_envelope(None, str(e), 400)
+
 @app.route('/api/sensor/report', methods=['POST'])
 def api_sensor_report():
     d = request.get_json(silent=True) or {}
     try:
-        return jsonify({'ok': True, **devices.report(d.get('device_id'), d.get('seat_code'), bool(d.get('occupied')))})
+        if 'ir_front' in d or 'ir_back' in d:
+            return _sensor_envelope(devices.protocol_report(
+                d.get('device_id'), d.get('seat_id'), d.get('ir_front', 0), d.get('ir_back', 0)))
+        return jsonify({'ok': True, **devices.report(d.get('device_id'), d.get('seat_code'), bool(d.get('occupied'))) })
     except Exception as e:
+        if 'ir_front' in d or 'ir_back' in d:
+            return _sensor_envelope(None, str(e), 400)
         return jsonify({'ok': False, 'error': str(e)}), 400
 
 

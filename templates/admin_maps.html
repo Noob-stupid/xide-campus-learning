@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+{% from 'base.html' import icon %}
+{% block title %}地图{% endblock %}
+{% block page_title %}地图 · 楼层底图{% endblock %}
+{% block eyebrow %}管理员 · 底图与座位坐标叠加{% endblock %}
+{% block content %}
+<div class="map-admin">
+  <section class="card">
+    <div class="card-head"><h3>楼层</h3><span class="small muted">先选楼层，再上传底图</span></div>
+    <div class="card-body">
+      <div id="floorList" class="map-floor-list"><div class="skeleton" style="height:90px"></div></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <div><h3 id="mapTitle">选择楼层</h3><span class="sub" id="mapSub">上传后作为选座页底图，座位仍按坐标叠加</span></div>
+      <span class="badge blue" id="mapBadge">未选择</span>
+    </div>
+    <div class="card-body">
+      <div class="map-preview" id="mapPreview">
+        <div class="empty"><div class="empty-icon">{{ icon('seat') }}</div><b>还没选楼层</b><span>左侧选一层，上传图书馆/教学楼平面图</span></div>
+      </div>
+      <div class="row wrap" style="margin-top:14px;gap:10px;align-items:center">
+        <form id="mapForm" class="row" style="gap:8px;align-items:center">
+          <input class="input" type="file" id="mapFile" accept="image/png,image/jpeg,image/webp" required>
+          <button class="btn primary sm" type="submit">上传底图</button>
+        </form>
+        <button class="btn ghost sm" id="mapDelete" type="button" style="display:none">删除底图</button>
+      </div>
+      <div class="ai-panel" style="margin-top:14px">
+        参考智座的做法：底图只负责“看起来像真实楼层”，座位坐标和 A* 路网仍由数据库里的 <code>seats / nav_nodes / nav_edges</code> 决定。
+        上传前请把平面图裁成接近 960×620 的比例，座位标记会按原坐标叠加。
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  let floors = [], active = null;
+  const esc = s => ZX.escapeHtml(s == null ? '' : String(s));
+
+  function renderList() {
+    const box = document.getElementById('floorList');
+    if (!floors.length) { box.innerHTML = '<div class="empty"><b>没有楼层</b><span>先运行 seed.py</span></div>'; return; }
+    box.innerHTML = floors.map(f => '<button class="map-floor-item ' + (active && active.id === f.id ? 'active' : '') + '" data-id="' + f.id + '">' +
+      '<span><b>' + esc(f.building) + ' · ' + esc(f.name) + '</b><small>' + (f.seat_count || 0) + ' 座 · ' + (f.nav_count || 0) + ' 个路网节点</small></span>' +
+      '<span class="badge ' + (f.plan_url ? 'green' : 'gray') + '">' + (f.plan_url ? '有底图' : '无底图') + '</span></button>').join('');
+    box.querySelectorAll('.map-floor-item').forEach(el => el.addEventListener('click', () => selectFloor(Number(el.dataset.id))));
+  }
+
+  function selectFloor(id) {
+    active = floors.find(f => f.id === id);
+    renderList();
+    document.getElementById('mapTitle').textContent = active ? active.building + ' · ' + active.name : '选择楼层';
+    document.getElementById('mapSub').textContent = active ? active.seat_count + ' 个座位 · ' + active.nav_count + ' 个路网节点' : '';
+    document.getElementById('mapBadge').textContent = active ? (active.plan_url ? '已上传' : '未上传') : '未选择';
+    document.getElementById('mapBadge').className = 'badge ' + (active && active.plan_url ? 'green' : 'gray');
+    const p = document.getElementById('mapPreview');
+    if (!active) { p.innerHTML = '<div class="empty"><b>还没选楼层</b></div>'; return; }
+    if (active.plan_url) {
+      p.innerHTML = '<img src="' + active.plan_url + '" alt="楼层底图" style="width:100%;max-height:460px;object-fit:contain;background:#fff;border-radius:12px">';
+    } else {
+      p.innerHTML = '<div class="empty"><div class="empty-icon">🗺️</div><b>这一层还没有底图</b><span>上传 PNG/JPG，选座页会把它垫在座位下面</span></div>';
+    }
+    document.getElementById('mapDelete').style.display = active.plan_url ? '' : 'none';
+  }
+
+  async function loadFloors() {
+    const r = await ZX.api('/api/floors');
+    floors = r.floors || [];
+    if (!active && floors.length) active = floors[0];
+    renderList(); if (active) selectFloor(active.id);
+  }
+
+  document.getElementById('mapForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!active) return ZX.toast('先选楼层', 'err');
+    const file = document.getElementById('mapFile').files[0];
+    if (!file) return ZX.toast('先选图片', 'err');
+    const fd = new FormData(); fd.append('file', file);
+    const res = await fetch('/api/admin/floors/' + active.id + '/plan', { method: 'POST', body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!data.ok) return ZX.toast(data.error || '上传失败', 'err');
+    ZX.toast('底图已保存');
+    document.getElementById('mapFile').value = '';
+    await loadFloors();
+    active = floors.find(f => f.id === active.id) || active;
+    selectFloor(active.id);
+  });
+
+  document.getElementById('mapDelete').addEventListener('click', async () => {
+    if (!active || !confirm('删除这一层的底图？座位和路网不会删除。')) return;
+    try {
+      await ZX.api('/api/admin/floors/' + active.id + '/plan', { method: 'DELETE' });
+      ZX.toast('底图已删除');
+      await loadFloors();
+      active = floors.find(f => f.id === active.id) || active;
+      selectFloor(active.id);
+    } catch (e) { ZX.toast(e.message, 'err'); }
+  });
+
+  loadFloors().catch(e => ZX.toast(e.message, 'err'));
+</script>
+{% endblock %}

@@ -31,6 +31,7 @@
     <svg class="seat-svg" id="seatSvg" viewBox="0 0 960 620" role="img" aria-label="图书馆二楼座位地图">
       <rect class="wall" x="20" y="20" width="920" height="580" rx="18"></rect>
       <path class="corridor" d="M56 335 H904 M480 335 V598"></path>
+      <image id="floorPlanImage" x="20" y="20" width="920" height="580" preserveAspectRatio="xMidYMid slice" style="display:none;opacity:.62;pointer-events:none"></image>
       <g id="zoneLabels"></g>
       <circle class="entry" cx="480" cy="598" r="13"></circle>
       <text class="entry-text" x="480" y="602" text-anchor="middle">入口</text>
@@ -162,6 +163,13 @@
     ZX.toast('推荐 ' + free[0].code + '：靠窗/安静/电源综合最优');
   }
 
+  function applyFloorPlan(fl) {
+    const img = document.getElementById('floorPlanImage');
+    if (!img) return;
+    if (fl && fl.plan_url) { img.setAttribute('href', fl.plan_url); img.style.display = ''; }
+    else { img.removeAttribute('href'); img.style.display = 'none'; }
+  }
+
   async function loadSeats(fid) {
     currentFloor = fid;
     try {
@@ -170,6 +178,7 @@
       document.getElementById('seatDetail').innerHTML = '<div class="empty"><div class="empty-icon">🪑</div><b>点一个座位</b><span>在左侧地图上选择，或让系统推荐。</span></div>';
       document.getElementById('bookCard').style.display = 'none';
       const fl = floors.find(f => f.id === fid);
+      applyFloorPlan(fl);
       if (fl) { document.getElementById('floorLabel').textContent = fl.building + ' · ' + fl.name; const ph = document.querySelector('.topbar-title h1'); if (ph) ph.textContent = fl.building + ' · ' + fl.name; }
     } catch (e) { ZX.toast(e.message, 'err'); }
   }

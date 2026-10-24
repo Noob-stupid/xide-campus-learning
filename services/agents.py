@@ -287,7 +287,7 @@ def _active_session(user_id):
 
 def _approved_contents(subject='', keyword='', limit=3):
     sql = ("SELECT id, title, subject, knowledge_point, description, duration_sec,"
-           "       source_type, views, helpful, cover_path, published_at"
+           "       source_type, views, helpful, file_path, cover_path, published_at"
            "  FROM contents WHERE status='approved'")
     args = []
     if subject:
@@ -622,6 +622,67 @@ _HANDLERS = {
 
 
 # ---------------------------------------------------------------- 入口
+
+
+
+_EXPLAIN = {
+    '极限': ('极限描述的是变量无限接近某个值时函数的变化趋势，它不等于该点的函数值。先看从左边和右边趋近时是否走到同一个值，再看是否等于该点取值。',
+             '如果左右极限不相等，能说这个极限存在吗？'),
+    '导数': ('导数是瞬时变化率，几何上就是切线斜率。可导一定连续，但连续不一定可导，例如尖点处。',
+             '为什么 |x| 在 0 点连续但不可导？'),
+    '时态': ('英语时态先判断动作发生的时间，再判断它是习惯、正在进行、已经完成还是持续到现在。',
+             '“我已经学了两个小时”应该用现在完成时还是现在完成进行时？'),
+    '递归': ('递归是把大问题拆成同结构的小问题。写递归先写终止条件，再保证每次调用规模更小。',
+             '递归函数如果没有终止条件，会发生什么？'),
+    '语法': ('语法先找句子主干：谁做什么；再看时态、语态和从句修饰。先把长句拆短，再判断关系。',
+             '这个句子的主语和谓语分别是什么？'),
+    '单词': ('单词不要孤立背。把词放进一个你熟悉的句子里，同时记搭配和词性，回忆时先想场景再想中文。',
+             '这个词你能造一个和今天学习内容有关的句子吗？'),
+    '概率': ('概率题先明确样本空间和事件，再判断是古典概型、条件概率还是独立重复试验。',
+             '这道题的样本空间一共有多少个等可能结果？'),
+    '线代': ('线代先看对象：向量、矩阵还是线性变换；再问它是否可逆、秩是多少、特征值说明什么。',
+             '这个矩阵的秩能说明它的列向量是否线性相关吗？'),
+}
+
+
+def learning_ask(text, user_id, session_id=None):
+    """学习页“问小习”：先给一个可读的解释，再从已过审内容库推荐视频。"""
+    text = _norm(text)
+    sess = _active_session(user_id)
+    subject = _subject_of(text) or ((dict(sess)['subject'] if sess else '') or '')
+    keyword = ''
+    for word in ('极限', '导数', '时态', '递归', '语法', '单词', '概率', '线代', '积分', '函数'):
+        if word in text:
+            keyword = word
+            break
+    if not keyword:
+        # 从问题里取一个较短的关键片段，便于内容库 LIKE 检索
+        keyword = text[:12]
+    explanation, check = _EXPLAIN.get(keyword, ('我先按你的问题拆一下：先确认题目给的条件，再找要求的量，最后把中间步骤写成可检查的式子。', '你能先把题目里已知条件和要求的量各写一行吗？'))
+    rows = [dict(r, reason=_content_reason(r, subject, keyword))
+            for r in _approved_contents(subject=subject, keyword='' if keyword == text[:12] else keyword, limit=3)]
+    if not rows:
+        rows = [dict(r, reason=_content_reason(r, subject, ''))
+                for r in _approved_contents(limit=3)]
+    answer = explanation
+    if subject:
+        answer = '（%s）%s' % (subject, answer)
+    calls = [_tool('query_contents', ok=bool(rows), summary='按问题关键词检索已过审视频',
+                   subject=subject, keyword=keyword, count=len(rows))]
+    _log(user_id, session_id, 'learning_help', text, answer, calls)
+    return {
+        'intent': 'learning_help',
+        'reply': answer,
+        'answer': answer,
+        'check_question': check,
+        'slots': {'subject': subject, 'knowledge_point': keyword},
+        'data': {'subject': subject, 'keyword': keyword, 'contents': rows},
+        'contents': rows,
+        'suggestions': (['看第一条推荐', '再解释简单一点', '换一个知识点'] if rows else ['去接力池看看', '再解释简单一点']),
+        'tool_calls': calls,
+        'agent': '小习 · 学习助手',
+    }
+
 
 def ask(text, user_id, session_id=None):
     """一句话 → 结构化答复。永不抛异常（内部异常降级成 unknown + 提示）。"""

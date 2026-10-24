@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS floors (
   building TEXT NOT NULL,
   floor_no INTEGER NOT NULL,
   plan_w INTEGER DEFAULT 960,
-  plan_h INTEGER DEFAULT 620
+  plan_h INTEGER DEFAULT 620,
+  plan_path TEXT DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS buildings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -209,6 +210,10 @@ def connect():
 def init_db():
     conn = connect()
     conn.executescript(SCHEMA)
+    # 轻量迁移：已有库补楼层底图字段
+    cols = {row[1] for row in conn.execute('PRAGMA table_info(floors)').fetchall()}
+    if 'plan_path' not in cols:
+        conn.execute("ALTER TABLE floors ADD COLUMN plan_path TEXT DEFAULT ''")
     conn.commit()
     conn.close()
 

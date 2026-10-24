@@ -26,7 +26,7 @@ agent-kernel.exe --port 4097 --working-directory D:\华为ICT\zhixue-space
 
 ```text
 python -m pytest -q
-87 passed
+87 passed（当时）；当前全量 90 passed
 ```
 
 ## 涉及文件
