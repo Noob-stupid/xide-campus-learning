@@ -253,12 +253,22 @@ export struct SeatsView {
       })
   }
 
+  private shortCode(code: string): string {
+    const c: string = code.replace('-', '');
+    if (c.length === 3 && c.charAt(1) === '0') {
+      return c.charAt(0) + c.charAt(2);
+    }
+    return c;
+  }
+
   @Builder
   seatCell(s: SeatInfo) {
-    Text(s.code.replace('-', ''))
-      .fontSize(8)
+    Text(s.code.replace('-', '').substring(1))
+      .fontSize(7)
       .fontColor(Theme.WHITE)
       .textAlign(TextAlign.Center)
+      .maxLines(1)
+      .textOverflow({ overflow: TextOverflow.Clip })
       .width(s.w * this.seatScale)
       .height(s.h * this.seatScale)
       .backgroundColor(this.seatColor(s.live_status))

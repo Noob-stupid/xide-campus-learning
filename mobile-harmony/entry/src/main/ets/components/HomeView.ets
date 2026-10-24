@@ -4,6 +4,30 @@ import { Fmt } from '../common/Format';
 import { StatsInfo, StudySession, RelayPush, UserInfo } from '../model/Types';
 import { router } from '@kit.ArkUI';
 
+@Component
+struct StatCard {
+  @Prop label: string = '';
+  @Prop value: string = '-';
+  @Prop color: string = Theme.FREE;
+
+  build() {
+    Column({ space: 4 }) {
+      Text(this.value)
+        .fontSize(22)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(this.color)
+      Text(this.label)
+        .fontSize(12)
+        .fontColor(Theme.TEXT_SUB)
+    }
+    .layoutWeight(1)
+    .padding(14)
+    .backgroundColor(Theme.CARD)
+    .borderRadius(Theme.RADIUS)
+    .alignItems(HorizontalAlign.Start)
+  }
+}
+
 /** 今日页：问候、数据卡、当前场次、今日建议、最近接棒 */
 @Component
 export struct HomeView {
@@ -218,14 +242,14 @@ export struct HomeView {
 
         // 数据卡
         Row({ space: 12 }) {
-          this.statCard('空闲座位', this.stats ? this.stats.seats_free.toString() : '-', Theme.FREE)
-          this.statCard('今日场次', this.stats ? this.stats.sessions_today.toString() : '-', Theme.ACCENT)
+          StatCard({ label: '空闲座位', value: this.stats ? this.stats.seats_free.toString() : '-', color: Theme.FREE })
+          StatCard({ label: '今日场次', value: this.stats ? this.stats.sessions_today.toString() : '-', color: Theme.ACCENT })
         }
         .width('100%')
 
         Row({ space: 12 }) {
-          this.statCard('接棒总数', this.stats ? this.stats.pushes.toString() : '-', Theme.BOOKED)
-          this.statCard('有帮助率', this.stats ? this.stats.helpful_rate.toString() + '%' : '-', Theme.SUCCESS)
+          StatCard({ label: '接棒总数', value: this.stats ? this.stats.pushes.toString() : '-', color: Theme.BOOKED })
+          StatCard({ label: '有帮助率', value: this.stats ? this.stats.helpful_rate.toString() + '%' : '-', color: Theme.SUCCESS })
         }
         .width('100%')
 
