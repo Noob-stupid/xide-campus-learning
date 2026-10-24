@@ -4,7 +4,7 @@
    方向：校园导视 / 图书馆索引牌：冷灰蓝底、深海军蓝、信号橙。 */
 
 :root{
-  --ink:#0b1f33; --ink-2:#1d3a55; --muted:#5f7186; --muted-2:#8b99a8;
+  --ink:#0b1f33; --navy:#1a4668; --navy-deep:#12314d; --ink-2:#1d3a55; --muted:#5f7186; --muted-2:#8b99a8;
   --line:#dce3eb; --line-2:#e9eef4; --bg:#f2f5f7; --surface:#ffffff;
   --amber:#d9773f; --amber-soft:#fbeee6; --teal:#167a6a; --teal-soft:#e5f3ef;
   --red:#b84235; --red-soft:#fbe9e6; --green:#167a6a; --blue-soft:#eaf0f7;
@@ -32,9 +32,9 @@ h1,h2,h3,.h1,.h2,.h3,.brand-text b,.poster-title{
 }
 
 /* 侧栏：结构和宽度不动，只换色与选中态 */
-.sidebar{background:#0a1c2e;color:#dbe7f2}
+.sidebar{background:var(--navy-deep);color:#e2edf7}
 .brand{border-bottom-color:rgba(255,255,255,.08)}
-.brand-mark{background:#132f4a;color:var(--amber);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.brand-mark{background:#1d4a6e;color:var(--amber);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
 .brand-text b{letter-spacing:.08em}
 .brand-text small{color:#91a8bf}
 .side-link{color:#a9bdd2}
@@ -85,7 +85,7 @@ h1,h2,h3,.h1,.h2,.h3,.brand-text b,.poster-title{
 .badge.red{background:var(--red-soft);color:var(--red)}
 
 /* Hero：保留原尺寸与排布，只去掉渐变/光晕，换成实色导视牌 */
-.hero{background:#102b45;color:#fff;box-shadow:none}
+.hero{background:var(--navy);color:#fff;box-shadow:none}
 .hero::before,.hero::after{display:none}
 .hero .eyebrow{color:#e6a06f}
 .hero h2{color:#fff;font-weight:650}
@@ -116,18 +116,18 @@ h1,h2,h3,.h1,.h2,.h3,.brand-text b,.poster-title{
 .seat-svg .entry{fill:var(--ink)}
 
 /* 内容卡片 */
-.content-cover{background:#102b45}
+.content-cover{background:var(--navy)}
 .content-cover .src{background:#fff;color:var(--ink);border-radius:5px}
 .content-cover .duration{background:rgba(11,31,51,.78);border-radius:5px}
 
 /* 个人主页 */
-.profile-cover{background:#102b45}
+.profile-cover{background:var(--navy)}
 .profile-cover::after{background-image:linear-gradient(rgba(255,255,255,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.06) 1px,transparent 1px)}
 .profile-stats b{font-family:var(--display);font-weight:650}
 .tab.active{color:var(--ink);border-bottom-color:var(--amber)}
 
 /* 登录：保留左右分栏，只换色与字重 */
-.login-art{background:#102b45;color:#fff}
+.login-art{background:var(--navy);color:#fff}
 .login-art::after{display:none}
 .login-art h1{color:#fff;font-family:var(--display);font-weight:650;letter-spacing:-.02em}
 .login-art p{color:#c5d3e2}
