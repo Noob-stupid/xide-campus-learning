@@ -54,6 +54,14 @@ def trigger(session_id, trigger='manual'):
     old = db.one('SELECT * FROM relay_pushes WHERE session_id=? ORDER BY id DESC LIMIT 1', (session_id,))
     if old:
         return {'ok': True, 'push': dict(old), 'idempotent': True}
+    # 并发兜底：sweeper 线程与手动结束可能同时进入，用场次状态做原子抢占
+    claimed = db.one("UPDATE study_sessions SET status='relaying' WHERE id=? AND status IN ('active','ended') "
+                     "RETURNING id", (session_id,))
+    if not claimed:
+        old = db.one('SELECT * FROM relay_pushes WHERE session_id=? ORDER BY id DESC LIMIT 1', (session_id,))
+        if old:
+            return {'ok': True, 'push': dict(old), 'idempotent': True}
+        raise ValueError('场次正在推送中或已结束')
 
     run_id = flow.start('relay', {'session_id': session_id, 'trigger': trigger, 'subject': sess.get('subject')},
                         user_id=sess['user_id'], title='接棒 · %s' % (sess.get('subject') or '学习'))
@@ -116,6 +124,7 @@ def trigger(session_id, trigger='manual'):
         flow.finish(run_id, 'succeeded')
     except Exception as e:
         flow.finish(run_id, 'failed')
+        db.execute("UPDATE study_sessions SET status='ended' WHERE id=? AND status='relaying'", (session_id,))
         raise
     push = db.one('SELECT * FROM relay_pushes WHERE session_id=? ORDER BY id DESC LIMIT 1', (session_id,))
     return {'ok': True, 'run_id': run_id, 'push': dict(push) if push else None}

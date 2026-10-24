@@ -1,0 +1,60 @@
+{
+  "info": {
+    "id": "msg_16cb3a9240018Lt4eYDFkbVagZ",
+    "cost": 0.0,
+    "mode": "",
+    "modelID": "default",
+    "path": {
+      "cwd": "",
+      "root": ""
+    },
+    "providerID": "openai",
+    "role": "assistant",
+    "sessionID": "b5d0be33-601a-4e0c-95d4-b7e0fddccc2b",
+    "parentID": "msg_16cb2c56f002b1i0QYFE41BzSl",
+    "agent": "CLI Agent",
+    "time": {
+      "created": 1792825078772,
+      "completed": 1792825078772
+    },
+    "tokens": {
+      "cache": {
+        "read": 51712,
+        "write": 0
+      },
+      "input": 51854,
+      "output": 394,
+      "reasoning": 0
+    },
+    "finish": "tool-calls"
+  },
+  "parts": [
+    {
+      "id": "msg_16cb3a9240018Lt4eYDFkbVagZ-text",
+      "messageID": "msg_16cb3a9240018Lt4eYDFkbVagZ",
+      "sessionID": "b5d0be33-601a-4e0c-95d4-b7e0fddccc2b",
+      "text": "**结论：存在真实风险，已做最小修复。**\n\n风险点：`relay.trigger` 原来的幂等检查是“先查询 `relay_pushes`，再插入”，这两步之间没有原子性。`db.py` 每次调用都会新建连接并自动提交（db.py:232），而 `app.py:859` 的 sweeper 线程每 10 秒调用一次 `sweep_expired()`，它可能与手动 `POST /api/bookings/<id>/end` 同时进入同一场次，导致两边都查不到旧推送，于是各插入一条 `relay_pushes` 和一条 `messages`，造成重复推送。原有测试 `test_auto_expiry_triggers_relay_and_is_idempotent` 只覆盖串行重复调用，覆盖不到这个竞态。\n\n修复（services/relay.py:57-64）：在查询旧推送之后，用一条原子 UPDATE 抢占场次状态 `active|ended → relaying`，并通过 `RETURNING id` 判断是否抢到；抢不到时再查一次推送记录，有则返回 `idempotent`，无则抛错。异常分支（relay.py:127）把 `relaying` 回滚为 `ended`，保证失败后仍可重试。\n\n测试：`tests/test_core_flow.py` 新增 `test_relay_trigger_claims_session_atomically`，覆盖“已被抢占时不重复推送”和“回滚后可正常推送且只推一次”。\n\n验证：`python -m pytest -q` → 87 passed（原 86 + 新增 1）。修改文件：`services/relay.py`、`tests/test_core_flow.py`。",
+      "type": "text",
+      "agent": "CLI Agent"
+    },
+    {
+      "id": "prt_tool_msg_16cb3a9240018Lt4eYDFkbVagZ_call_00_dqc07sX5Sw5uTtqhqo6K8858",
+      "callID": "call_00_dqc07sX5Sw5uTtqhqo6K8858",
+      "messageID": "msg_16cb3a9240018Lt4eYDFkbVagZ",
+      "sessionID": "b5d0be33-601a-4e0c-95d4-b7e0fddccc2b",
+      "state": {
+        "input": {},
+        "metadata": {},
+        "output": "Job completed successfully. Agent cycle execution will stop.",
+        "status": "completed",
+        "time": {
+          "end": 1792825078778,
+          "start": 1792825078778
+        },
+        "title": ""
+      },
+      "tool": "job_done",
+      "type": "tool"
+    }
+  ]
+}

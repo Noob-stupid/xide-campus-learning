@@ -1,0 +1,60 @@
+{
+  "info": {
+    "id": "msg_16cb2c063001FI3IBPHHKo3SDe",
+    "cost": 0.0,
+    "mode": "",
+    "modelID": "default",
+    "path": {
+      "cwd": "",
+      "root": ""
+    },
+    "providerID": "openai",
+    "role": "assistant",
+    "sessionID": "b5d0be33-601a-4e0c-95d4-b7e0fddccc2b",
+    "parentID": "msg_16cb27895002SYSNhYEzlGFUPh",
+    "agent": "CLI Agent",
+    "time": {
+      "created": 1792825017594,
+      "completed": 1792825017594
+    },
+    "tokens": {
+      "cache": {
+        "read": 43648,
+        "write": 0
+      },
+      "input": 43837,
+      "output": 54,
+      "reasoning": 0
+    },
+    "finish": "tool-calls"
+  },
+  "parts": [
+    {
+      "id": "msg_16cb2c063001FI3IBPHHKo3SDe-text",
+      "messageID": "msg_16cb2c063001FI3IBPHHKo3SDe",
+      "sessionID": "b5d0be33-601a-4e0c-95d4-b7e0fddccc2b",
+      "text": "测试结果：**86 passed，0 failed**（耗时 13.87s），没有失败用例，因此无需定位失败原因，也未修改任何代码。",
+      "type": "text",
+      "agent": "CLI Agent"
+    },
+    {
+      "id": "prt_tool_msg_16cb2c063001FI3IBPHHKo3SDe_call_00_mp5oQPuXvQ0xW1buVcRA3008",
+      "callID": "call_00_mp5oQPuXvQ0xW1buVcRA3008",
+      "messageID": "msg_16cb2c063001FI3IBPHHKo3SDe",
+      "sessionID": "b5d0be33-601a-4e0c-95d4-b7e0fddccc2b",
+      "state": {
+        "input": {},
+        "metadata": {},
+        "output": "Job completed successfully. Agent cycle execution will stop.",
+        "status": "completed",
+        "time": {
+          "end": 1792825017599,
+          "start": 1792825017599
+        },
+        "title": ""
+      },
+      "tool": "job_done",
+      "type": "tool"
+    }
+  ]
+}

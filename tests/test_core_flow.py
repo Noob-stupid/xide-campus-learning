@@ -93,6 +93,23 @@ def test_auto_expiry_triggers_relay_and_is_idempotent(env):
     assert db.one('SELECT COUNT(*) c FROM relay_pushes WHERE session_id=?', (sess['id'],))['c'] == 1
 
 
+def test_relay_trigger_claims_session_atomically(env):
+    start, end = _window(60)
+    r = seats.book(1, env['sid'], '高等数学', '复习', start, end)
+    sess = seats.checkin(1, r['id'])
+    # 模拟另一个线程已抢占（status='relaying'）但尚未写入 relay_pushes
+    db.execute("UPDATE study_sessions SET status='relaying' WHERE id=?", (sess['id'],))
+    with pytest.raises(ValueError):
+        relay.trigger(sess['id'])
+    assert db.one('SELECT COUNT(*) c FROM relay_pushes WHERE session_id=?', (sess['id'],))['c'] == 0
+    # 抢占方失败回滚后，场次回到 ended，可再次正常推送且只推一次
+    db.execute("UPDATE study_sessions SET status='ended' WHERE id=?", (sess['id'],))
+    out = relay.trigger(sess['id'])
+    assert out['ok'] is True
+    assert db.one('SELECT COUNT(*) c FROM relay_pushes WHERE session_id=?', (sess['id'],))['c'] == 1
+    assert db.one('SELECT status FROM study_sessions WHERE id=?', (sess['id'],))['status'] == 'relayed'
+
+
 def test_agent_contract(env):
     out = agents.ask('找个靠窗安静的位置学高数', 1)
     for key in ('intent', 'reply', 'slots', 'data', 'suggestions', 'tool_calls', 'agent'):

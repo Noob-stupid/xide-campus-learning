@@ -12,3 +12,9 @@ _edgeprofile/
 shots/
 *.zip
 *.tar.gz
+
+.codearts-agent.env
+
+codearts-agent.yaml
+
+codearts-agent-sessions/
