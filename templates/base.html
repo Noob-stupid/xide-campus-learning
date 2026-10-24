@@ -30,6 +30,7 @@
   <title>{% block title %}习得{% endblock %} · 从落座到学会</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230F2A4A'/%3E%3Cpath d='M8 21h16M11 21v-7a5 5 0 0 1 10 0v7' stroke='%23C98A2E' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/editorial.css') }}">
   {% block head %}{% endblock %}
 </head>
 <body class="page-{{ active|default('login') }}">
@@ -72,6 +73,7 @@
           {% if user.avatar %}<img class="avatar xs" src="{{ user.avatar|media }}" alt="">{% else %}<span class="avatar xs">{{ user.name[:1] }}</span>{% endif %}
           <span>{{ user.name }}</span>
         </a>
+        <button class="topbar-logout" id="logoutBtn" type="button">退出</button>
       </div>
     </header>
     <main class="content">
@@ -106,6 +108,20 @@
 <div class="toast-wrap" id="toastWrap"></div>
 <div class="modal-root" id="modalRoot"></div>
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script>
+  (function () {
+    const btn = document.getElementById('logoutBtn');
+    if (!btn) return;
+    btn.addEventListener('click', async function () {
+      btn.disabled = true;
+      btn.textContent = '退出中…';
+      try {
+        await fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+      } catch (e) {}
+      location.href = '/login';
+    });
+  })();
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

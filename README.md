@@ -71,14 +71,22 @@ python app.py               # http://127.0.0.1:5820
 |---|---|---|
 | ![学习](docs/screenshots/06-learn.png) | ![接力池](docs/screenshots/07-pool.png) | ![导航](docs/screenshots/08-nav-3f.png) |
 
-| 室外导航 |
-|---|
-| ![室外导航](docs/screenshots/09-outdoor.png) |
+| 室外导航 | AI 设置 | 移动端首页 |
+|---|---|---|
+| ![室外导航](docs/screenshots/09-outdoor.png) | ![AI 设置](docs/screenshots/10-ai-settings.png) | ![移动端首页](docs/screenshots/11-mobile-home.png) |
 
 > 完整介绍：[docs/项目详细介绍.md](docs/项目详细介绍.md)；Word 版：[docs/习得-项目详细介绍.docx](docs/习得-项目详细介绍.docx)。
 > 交接文档：[docs/交接文档.md](docs/交接文档.md)；Word 版：[docs/习得-交接文档.docx](docs/习得-交接文档.docx)。
 > 移动端交接：[docs/移动端功能交接文档.md](docs/移动端功能交接文档.md)；Word 版：[docs/习得-移动端功能交接文档.docx](docs/习得-移动端功能交接文档.docx)。
 > 结项报告：[docs/结项报告.md](docs/结项报告.md)；Word 版：[docs/习得-结项报告.docx](docs/习得-结项报告.docx)。
+
+## 视觉风格
+
+- 暖纸底 `#F4EFE4`、墨绿 `#1F3B2E`、陶土点缀 `#B05A35`；
+- 衬线标题 + 无衬线正文，细线分隔，不用渐变、发光、玻璃拟态；
+- 左侧栏改为纸质目录，移动端变为顶部横向导航；
+- 样式集中在 `static/css/editorial.css`，加载在 `app.css` 之后，只覆盖视觉不改业务。
+
 
 ## 架构
 

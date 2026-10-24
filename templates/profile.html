@@ -20,6 +20,7 @@
     <button class="btn ghost sm" id="editBtn">{{ icon('user') }} 编辑资料</button>
     <button class="btn ghost sm" id="coverBtn">{{ icon('upload') }} 更换封面</button>
     <button class="btn primary sm" id="shareBtn">{{ icon('spark') }} 分享学习名片</button>
+    <button class="btn danger sm" id="logoutProfileBtn">退出登录</button>
   </div>
 </div>
 
@@ -151,6 +152,11 @@
       catch (e) { ZX.toast(e.message, 'err'); }
     });
   });
+  document.getElementById('logoutProfileBtn').addEventListener('click', async () => {
+    try { await ZX.api('/api/auth/logout', { method: 'POST' }); } catch (e) {}
+    location.href = '/login';
+  });
+
   document.getElementById('shareBtn').addEventListener('click', () => {
     if (!P) return;
     const st = P.stats;

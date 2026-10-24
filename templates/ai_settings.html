@@ -52,7 +52,7 @@
   function render() {
     const list = AI.providers || [];
     if (!list.length) {
-      box.innerHTML = '<div class="empty"><b>还没有供应商</b><span>添加一个 OpenAI 兼容接口，例如华为云 MaaS 的 /v1 地址。</span></div>';
+      box.innerHTML = '<div class="empty"><b>还没有供应商</b><span>添加一个 OpenAI 兼容接口，例如 DeepSeek、华为云 MaaS 的 /v1 地址。</span></div>';
     } else {
       box.innerHTML = list.map((p, i) => `
         <div class="card" data-i="${i}" data-id="${esc(p.id)}" style="box-shadow:none;border:1px solid var(--line)">
