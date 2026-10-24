@@ -91,6 +91,7 @@
     const open = () => { panel.classList.add('open'); panel.setAttribute('aria-hidden', 'false'); setTimeout(() => document.getElementById('assistantText').focus(), 50); };
     const close = () => { panel.classList.remove('open'); panel.setAttribute('aria-hidden', 'true'); };
     fab.addEventListener('click', () => panel.classList.contains('open') ? close() : open());
+    if (location.hash === '#xiaoxi') open();
     document.getElementById('assistantClose').addEventListener('click', close);
 
     const add = (text, cls) => {
@@ -101,6 +102,27 @@
       body.scrollTop = body.scrollHeight;
       return el;
     };
+    const renderRecos = (items) => {
+      if (!items || !items.length) return;
+      add('从已过审视频里给你挑了这些：', 'note');
+      const box = document.createElement('div');
+      box.className = 'ask-recos';
+      items.forEach(c => {
+        const card = document.createElement('div');
+        card.className = 'ask-reco';
+        card.innerHTML = '<div><b>' + ZX.escapeHtml(c.title || '学习视频') + '</b><small>' + ZX.escapeHtml(c.reason || '') + '</small></div>';
+        const b = document.createElement('button');
+        b.className = 'btn soft sm';
+        b.textContent = '看这条';
+        b.addEventListener('click', () => {
+          ZX.openModal('<div class="modal-head"><h3>' + ZX.escapeHtml(c.title || '学习视频') + '</h3><button class="icon-btn" data-close>×</button></div><div class="modal-body"><video controls autoplay style="width:100%;max-height:360px;background:#000;border-radius:12px" src="' + (c.file_url || '') + '"></video><div class="small muted" style="margin-top:10px">' + ZX.escapeHtml(c.reason || '') + '</div></div>');
+        });
+        card.appendChild(b);
+        box.appendChild(card);
+      });
+      body.appendChild(box);
+      body.scrollTop = body.scrollHeight;
+    };
     const ask = async (text) => {
       if (!text) return;
       add(text, 'user');
@@ -108,7 +130,19 @@
       try {
         const res = await ZX.api('/api/agent/ask', { method: 'POST', body: { text } });
         tip.remove();
-        add(res.reply || '我在。');
+        let answer = res.reply || '我在。';
+        let learning = null;
+        const learningIntent = res.intent === 'stuck' || res.intent === 'unknown';
+        if (learningIntent) {
+          try {
+            learning = await ZX.api('/api/learning/ask', { method: 'POST', body: { text } });
+            if (learning && learning.answer) answer = learning.answer;
+          } catch (e) {}
+        }
+        add(answer);
+        if (learning && learning.check_question) add('你可以先回答这个小问题：' + learning.check_question, 'note');
+        const contents = (learning && learning.contents) || (res.data && res.data.contents) || [];
+        renderRecos(contents);
         if (res.tool_calls && res.tool_calls.length) {
           add('调用：' + res.tool_calls.map(t => (t.tool || t.name || 'tool')).join(' · '), 'note');
         }

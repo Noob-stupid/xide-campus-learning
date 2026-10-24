@@ -463,6 +463,9 @@ def api_agent_ask():
     try:
         from services import agents
         out = agents.ask(text, u['id'], sess['id'] if sess else None)
+        for c in (out.get('data') or {}).get('contents', []):
+            c['file_url'] = media_url(c.get('file_path'))
+            c['cover_url'] = media_url(c.get('cover_path'))
         return jsonify({'ok': True, **out})
     except Exception as e:
         return jsonify({'ok': True, 'intent': 'unknown', 'agent': 'Router',

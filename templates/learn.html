@@ -11,24 +11,6 @@
     </section>
 
 
-    <section class="card" id="askCard">
-      <div class="card-head"><div><h3>问小习</h3><span class="sub">先解释，再从已过审视频里推荐一条</span></div><span class="badge blue">AI 学习助手</span></div>
-      <div class="card-body">
-        <div class="tutor-log" id="askLog" style="max-height:280px">
-          <div class="bubble agent">学习中遇到问题，直接问我。我会先用自己的话解释，再从接力池里挑一条对得上的视频。</div>
-          <div class="chips">
-            <button data-ask="极限为什么等于函数值？">高数 · 极限</button>
-            <button data-ask="递归怎么写才不会死循环？">编程 · 递归</button>
-            <button data-ask="英语时态怎么判断？">英语 · 时态</button>
-          </div>
-        </div>
-        <form class="tutor-input" id="askForm">
-          <input class="input" id="askText" placeholder="例如：我还是不懂 ε-δ 是什么意思" autocomplete="off">
-          <button class="btn primary sm" type="submit">{{ icon('send') }}</button>
-        </form>
-      </div>
-    </section>
-
     <section class="card">
       <div class="card-head"><h3>本场学习计划</h3><span class="badge blue">规则建议</span></div>
       <div class="card-body">
@@ -162,35 +144,6 @@
   document.querySelectorAll('#topicChips button').forEach(b => b.addEventListener('click', () => startTutor(b.dataset.topic)));
   document.getElementById('tutorForm').addEventListener('submit', e => { e.preventDefault(); const input = document.getElementById('tutorText'); const t = input.value.trim(); input.value = ''; answerTutor(t); });
 
-
-  /* 问小习：先回答，再推荐已过审视频 */
-  const askLog = document.getElementById('askLog');
-  const askAdd = (text, cls) => { const d = document.createElement('div'); d.className = 'bubble ' + (cls || 'agent'); d.textContent = text; askLog.appendChild(d); askLog.scrollTop = askLog.scrollHeight; return d; };
-  async function askXiaoXi(text) {
-    if (!text) return;
-    askAdd(text, 'user');
-    try {
-      const r = await ZX.api('/api/learning/ask', { method: 'POST', body: { text } });
-      askAdd(r.answer || r.reply || '我先按你的问题拆一下。');
-      if (r.check_question) askAdd('你可以先回答这个小问题：' + r.check_question, 'note');
-      if (r.contents && r.contents.length) {
-        askAdd('从已过审的接力池里，给你挑了这几条：', 'note');
-        const box = document.createElement('div'); box.className = 'ask-recos';
-        r.contents.forEach(c => {
-          const card = document.createElement('div'); card.className = 'ask-reco';
-          card.innerHTML = '<div><b>' + ZX.escapeHtml(c.title || '学习视频') + '</b><small>' + ZX.escapeHtml(c.reason || '') + '</small></div>';
-          const btn = document.createElement('button'); btn.className = 'btn soft sm'; btn.textContent = '看这条';
-          btn.addEventListener('click', () => {
-            ZX.openModal('<div class="modal-head"><h3>' + ZX.escapeHtml(c.title || '学习视频') + '</h3><button class="icon-btn" data-close>×</button></div><div class="modal-body"><video controls autoplay style="width:100%;max-height:360px;background:#000;border-radius:12px" src="' + (c.file_url || '') + '"></video><div class="small muted" style="margin-top:10px">' + ZX.escapeHtml(c.reason || '') + '</div></div>');
-          });
-          card.appendChild(btn); box.appendChild(card);
-        });
-        askLog.appendChild(box); askLog.scrollTop = askLog.scrollHeight;
-      }
-    } catch (e) { askAdd('刚才没接上：' + e.message, 'note'); }
-  }
-  document.querySelectorAll('[data-ask]').forEach(b => b.addEventListener('click', () => askXiaoXi(b.dataset.ask)));
-  document.getElementById('askForm').addEventListener('submit', e => { e.preventDefault(); const input = document.getElementById('askText'); const t = input.value.trim(); input.value = ''; askXiaoXi(t); });
 
   (async function init() {
     try { const r = await ZX.api('/api/sessions/current'); renderSession(r.session); } catch (e) { renderSession(null); }
