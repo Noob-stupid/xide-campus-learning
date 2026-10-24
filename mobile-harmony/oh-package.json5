@@ -1,8 +1,6 @@
 {
   "modelVersion": "5.0.0",
-  "description": "习得 · HarmonyOS Web 壳",
+  "description": "习得 · HarmonyOS 端",
   "dependencies": {},
-  "devDependencies": {
-    "@ohos/hvigor-ohos-plugin": "5.0.0"
-  }
+  "devDependencies": {}
 }

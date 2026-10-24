@@ -23,7 +23,7 @@ export struct SeatsView {
   @State err: string = '';
   @State planW: number = 960;
   @State planH: number = 620;
-  @State scale: number = 0.42;
+  @State seatScale: number = 0.42;
 
   // 预约表单
   @State subject: string = '高等数学';
@@ -259,14 +259,14 @@ export struct SeatsView {
       .fontSize(8)
       .fontColor(Theme.WHITE)
       .textAlign(TextAlign.Center)
-      .width(s.w * this.scale)
-      .height(s.h * this.scale)
+      .width(s.w * this.seatScale)
+      .height(s.h * this.seatScale)
       .backgroundColor(this.seatColor(s.live_status))
       .borderRadius(2)
       .border(this.selected && this.selected.id === s.id
         ? { width: 2, color: Theme.ACCENT }
         : { width: 0, color: Color.Transparent })
-      .position({ x: s.x * this.scale, y: s.y * this.scale })
+      .position({ x: s.x * this.seatScale, y: s.y * this.seatScale })
       .onClick(() => {
         this.pick(s);
       })
@@ -332,8 +332,8 @@ export struct SeatsView {
               this.seatCell(s)
             }, (s: SeatInfo) => s.id.toString())
           }
-          .width(this.planW * this.scale)
-          .height(this.planH * this.scale)
+          .width(this.planW * this.seatScale)
+          .height(this.planH * this.seatScale)
         }
         .scrollable(ScrollDirection.Horizontal)
         .width('100%')

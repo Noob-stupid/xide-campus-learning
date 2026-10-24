@@ -41,7 +41,7 @@ struct WebShell {
         .onErrorReceive((event) => {
           this.loading = false;
           if (event && event.error) {
-            this.errorText = '页面加载失败：' + event.error.errorInfo;
+            this.errorText = '页面加载失败：' + event.error.getErrorInfo();
           }
         })
 
