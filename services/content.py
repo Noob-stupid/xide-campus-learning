@@ -544,6 +544,18 @@ def _fresh_text(row):
     return '%d 天前入池' % int(days)
 
 
+def _feedback_score(row):
+    """内容历史反馈：0.5 中性，1 全有帮助，0 全没帮助；样本少时向 0.5 收敛。"""
+    helpful = int(row.get('helpful') or 0)
+    unhelpful = int(row.get('unhelpful') or 0)
+    total = helpful + unhelpful
+    if total <= 0:
+        return 0.5
+    rate = helpful / total
+    confidence = min(1.0, total / 5.0)
+    return 0.5 + (rate - 0.5) * confidence
+
+
 def match_for_session(session, limit=5):
     """只从 approved 内容里，按 主题/知识点/时长/新鲜度 打分，返回带 reason 的推荐列表。"""
     session = dict(session or {})
@@ -561,7 +573,10 @@ def match_for_session(session, limit=5):
         kn = _knowledge_score(knowledge, r)
         dur = _duration_score(r.get('duration_sec'))
         fresh = _freshness_score(r)
-        score = round(40.0 * sub + 25.0 * kn + 20.0 * dur + 15.0 * fresh, 2)
+        feedback = _feedback_score(r)
+        base = 40.0 * sub + 25.0 * kn + 20.0 * dur + 15.0 * fresh
+        # 历史反馈作为温和权重：中性 1.0，最多 +15%，最少 -15%。
+        score = round(min(100.0, base * (0.85 + 0.30 * feedback)), 2)
         if score <= 3.0:
             continue
 
@@ -574,6 +589,10 @@ def match_for_session(session, limit=5):
         parts.append(_duration_text(r.get('duration_sec')))
         parts.append(_fresh_text(r))
         parts.append('已通过人工复核')
+        _n = int(r.get('helpful') or 0) + int(r.get('unhelpful') or 0)
+        if _n > 0:
+            _h = int(r.get('helpful') or 0)
+            parts.append('历史反馈 %d%% 有帮助' % round(_h * 100 / _n))
         reason = ' · '.join(parts)
 
         out.append({
@@ -588,6 +607,7 @@ def match_for_session(session, limit=5):
                 'knowledge': round(kn, 4),
                 'duration': round(dur, 4),
                 'freshness': round(fresh, 4),
+                'feedback': round(feedback, 4),
             },
             'cover_path': r.get('cover_path') or '',
             'file_path': r.get('file_path') or '',

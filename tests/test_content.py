@@ -303,3 +303,10 @@ def test_match_reason_mentions_knowledge_point(demo_video):
     _approve(demo_video, '二次函数·判别式', subject='数学', kp='判别式')
     hit = content.match_for_session({'subject': '数学', 'knowledge_point': '判别式'})[0]
     assert '知识点' in hit['reason']
+
+
+def test_feedback_score_neutral_and_extremes():
+    assert content._feedback_score({'helpful': 0, 'unhelpful': 0}) == 0.5
+    assert content._feedback_score({'helpful': 5, 'unhelpful': 0}) == 1.0
+    assert content._feedback_score({'helpful': 0, 'unhelpful': 5}) == 0.0
+    assert 0.5 < content._feedback_score({'helpful': 1, 'unhelpful': 0}) < 1.0
