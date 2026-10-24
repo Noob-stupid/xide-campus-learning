@@ -173,13 +173,13 @@ MIT，见 `LICENSE`。
 - 当前机器未安装 DevEco Studio / HarmonyOS SDK，因此这里只完成源码，未编译 HAP；
 - 原生通知/扫码/震动桥接见 `docs/移动端功能交接文档.md`。
 
-## 可选 AI 层（MaaS / OpenAI 兼容）
+## 可选 AI 层（DeepSeek / 华为 MaaS / OpenAI 兼容）
 
 `services/llm.py` 已接 OpenAI 兼容通道，不影响未配置时的规则兜底：
 
 - `ZX_LLM_BASE_URL`：模型服务地址（含 /v1）
 - `ZX_LLM_API_KEY`：API Key
-- `ZX_LLM_MODEL`：模型名
+- `ZX_LLM_MODEL`：模型名（DeepSeek 用 `deepseek-chat`）
 
 配置后用于：接棒候选重排、卡住了辅导追问、助手回复润色；未配置时全部走规则引擎。
 
