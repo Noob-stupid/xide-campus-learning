@@ -190,6 +190,13 @@ def messages_page():
     return render_template('messages.html', active='profile')
 
 
+# ---------------- health ----------------
+
+@app.route('/api/health')
+def api_health():
+    return jsonify({'ok': True, 'service': 'xide'})
+
+
 # ---------------- auth ----------------
 
 @app.route('/api/auth/login', methods=['POST'])

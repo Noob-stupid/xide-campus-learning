@@ -1,0 +1,60 @@
+{
+  "info": {
+    "id": "msg_16cb1e761001miiuLf3mqC6X4e",
+    "cost": 0.0,
+    "mode": "",
+    "modelID": "default",
+    "path": {
+      "cwd": "",
+      "root": ""
+    },
+    "providerID": "openai",
+    "role": "assistant",
+    "sessionID": "b5d0be33-601a-4e0c-95d4-b7e0fddccc2b",
+    "parentID": "msg_16cb1d5d7002PZQ5ny36DW9XSN",
+    "agent": "CLI Agent",
+    "time": {
+      "created": 1792824968320,
+      "completed": 1792824968320
+    },
+    "tokens": {
+      "cache": {
+        "read": 36736,
+        "write": 0
+      },
+      "input": 38779,
+      "output": 1451,
+      "reasoning": 0
+    },
+    "finish": "tool-calls"
+  },
+  "parts": [
+    {
+      "id": "msg_16cb1e761001miiuLf3mqC6X4e-text",
+      "messageID": "msg_16cb1e761001miiuLf3mqC6X4e",
+      "sessionID": "b5d0be33-601a-4e0c-95d4-b7e0fddccc2b",
+      "text": "## 1）从自习结束到接棒推送的完整数据流\n\n```\nPOST /api/bookings/<rid>/end            app.py:273  → seats.end(user_id, rid)\n  └ seats._end_reservation              seats.py:184\n      ├ reservations.status = 'completed', checkout_at\n      ├ study_sessions: ended_at / duration_min / status='ended'   (无场次则补建一条)\n      ├ reason=='auto' → messages(kind='session','学习时间到')\n      └ relay.trigger(session_id, trigger='auto'|'manual')   ← 异常被吞掉(seats.py:208)\n          └ relay.trigger                   relay.py:48\n              ├ 幂等：relay_pushes 已有该 session_id → 直接返回 idempotent\n              ├ flow.start('relay')  → run_id\n              ├ step trigger  结束/到期事件\n              ├ step context  聚合 users.name + seat_code/zone/subject/duration_min/stuck_points\n              ├ step recall   _candidates(session)\n              │     ├ content.match_for_session(session, limit=5)   content.py:559\n              │     │     ├ 只取 contents.status='approved'\n              │     │     ├ 打分 → 排序 → 取 top5\n              │     │     └ llm.rerank(session, top) 成功则替换顺序\n              │     └ 异常/空 → _fallback_match()   relay.py:19（0.45/0.25/0.15/0.1 简易打分）\n              ├ step rank     top = candidates[0], ranked = candidates[:3]\n              ├ step decide   push / fallback\n              ├ step push     INSERT relay_pushes(session_id,user_id,content_id,reason,score_json)\n              │               INSERT messages(kind='relay', payload={push_id,content_id})\n              │               UPDATE study_sessions SET status='relayed', relay_content_id, pushed_at\n              └ flow.finish('succeeded' / 'failed')\n```\n\n推送之后：`GET /api/relay/pending` → `relay.pending()` 联表 contents/users/seats 返回接力卡；`POST /api/relay/<pid>/open` 写 `opened_at` 并 `contents.views+1`；`POST /api/relay/<pid>/feedback` 写 `relay_pushes.feedback` 并 `contents.helpful/unhelpful+1`，该计数回流到下一次匹配的反馈系数。\n\n## 2）当前规则权重与反馈系数\n\n`content.match_for_session`（content.py:577-579）：\n\n| 维度 | 权重 | 计算 |\n|---|---|---|\n| 主题 subject | 40 | 完全相同 1.0；包含 0.85；否则 bigram 覆盖率 ≤0.7 |\n| 知识点 knowledge | 25 | 卡点 bigram 对 knowledge_point/title/description/ai_summary 的覆盖率；无卡点取中性 0.5 |\n| 时长 duration | 20 | `1 - |sec-180|/300`，夹到 0–1；≤0 取 0.5 |\n| 新鲜度 freshness | 15 | `1/(1+days/10)`，无时间戳 0.3 |\n\n`base = 40·sub + 25·kn + 20·dur + 15·fresh`，再乘反馈系数：\n\n`score = min(100, base × (0.85 + 0.30 × feedback))`，feedback = `0.5 + (helpful/total − 0.5) × min(1, total/5)`，即中性 1.0、区间 0.85–1.15；`score ≤ 3` 直接丢弃。\n\n兜底路径 `relay._fallback_match` 权重不同：主题 0.45 / 卡点 0.25 / 时长 60–600s 0.15 / 质量 0.1，上限 1.0。\n\n## 3）AI 重排失败时的回退点\n\n- 主回退点：`content.py:620-627`，`llm.rerank` 抛异常或返回假值 → `except: pass` → 返回规则排序 `top`。\n- `llm.rerank` 内部自身返回 None 的情形（llm.py:255-300）：未配置 LLM（`available()` 为假）、候选为空、返回非 JSON、`ordered_ids` 全非法/为空。\n- 上层回退：`relay._candidates`（relay.py:7-16）在 `match_for_session` 抛异常或返回空时 → `_fallback_match`。\n- 再上层：`seats._end_reservation` 吞掉 `relay.trigger` 异常（seats.py:205-209），结束流程不因推送失败而失败；`relay.trigger` 内部异常会 `flow.finish('failed')` 后重新抛出。\n- 无候选时走 `_fallback` 兜底建议消息（relay.py:105-114），场次仍置为 `relayed`。\n\n## 4）三个可验证的验收点\n\n1. **幂等**：对同一 `session_id` 连续调用两次 `relay.trigger`，第二次返回 `idempotent: True`，`relay_pushes` 中该 session 只有 1 行，`messages` 只多 1 条。\n2. **只推已过审内容**：把候选内容置为 `pending_review`/`rejected` 后触发接棒，`relay_pushes.content_id` 不得指向该内容；全部不可用时走兜底消息且 `study_sessions.status='relayed'`、`relay_content_id` 为空。\n3. **反馈系数生效**：同一内容累计 5 条 `unhelpful` 后，`_feedback_score` 应为 0.0、总分乘 0.85；5 条 `helpful` 后为 1.0、乘 1.15，且 `breakdown.feedback` 与 `score` 满足 `score = min(100, base×(0.85+0.30×feedback))`。\n\n（另可加：LLM 不可用时 `match_for_session` 返回顺序与规则排序完全一致，且每项 `ai_reranked` 不存在。）",
+      "type": "text",
+      "agent": "CLI Agent"
+    },
+    {
+      "id": "prt_tool_msg_16cb1e761001miiuLf3mqC6X4e_call_00_U5hwcxo8UQJN9N4s6wDo1459",
+      "callID": "call_00_U5hwcxo8UQJN9N4s6wDo1459",
+      "messageID": "msg_16cb1e761001miiuLf3mqC6X4e",
+      "sessionID": "b5d0be33-601a-4e0c-95d4-b7e0fddccc2b",
+      "state": {
+        "input": {},
+        "metadata": {},
+        "output": "Job completed successfully. Agent cycle execution will stop.",
+        "status": "completed",
+        "time": {
+          "end": 1792824968324,
+          "start": 1792824968324
+        },
+        "title": ""
+      },
+      "tool": "job_done",
+      "type": "tool"
+    }
+  ]
+}
