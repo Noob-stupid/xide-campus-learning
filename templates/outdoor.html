@@ -37,6 +37,7 @@
         <text id="outEndLabel" x="480" y="336" text-anchor="middle" class="outdoor-label">目的地</text>
         <text id="outDirection" x="480" y="520" text-anchor="middle" class="outdoor-muted">—</text>
       </svg>
+      <div id="amapBox" style="display:none;width:100%;height:520px;border-radius:16px;overflow:hidden;background:#eef2f7"></div>
     </div>
   </section>
 
@@ -70,7 +71,43 @@
 {% block scripts %}
 <script>
   const AMAP_KEY = {{ (amap_key or '')|tojson }};
+  const AMAP_SEC = {{ (amap_security or '')|tojson }};
   let current = null;
+  let amapMap = null;
+  let amapReady = false;
+
+  function loadAmap() {
+    if (!AMAP_KEY || amapReady) return;
+    if (AMAP_SEC) window._AMapSecurityConfig = { securityJsCode: AMAP_SEC };
+    const s = document.createElement('script');
+    s.src = 'https://webapi.amap.com/maps?v=2.0&key=' + encodeURIComponent(AMAP_KEY) + '&plugin=AMap.Walking';
+    s.onload = () => { amapReady = true; if (current) drawAmap(current); };
+    s.onerror = () => { /* 保留 SVG 降级图 */ };
+    document.head.appendChild(s);
+  }
+
+  function drawAmap(d) {
+    if (!window.AMap || !d || !d.building || !d.start) return;
+    const box = document.getElementById('amapBox');
+    const svg = document.getElementById('outdoorSvg');
+    if (!box || !svg) return;
+    box.style.display = 'block';
+    svg.style.display = 'none';
+    if (!amapMap) {
+      amapMap = new AMap.Map('amapBox', { zoom: 16, center: [d.building.lng, d.building.lat], resizeEnable: true });
+    }
+    amapMap.clearMap();
+    new AMap.Marker({ position: [d.start.lng, d.start.lat], title: '当前位置' }).setMap(amapMap);
+    new AMap.Marker({ position: [d.building.lng, d.building.lat], title: d.building.name }).setMap(amapMap);
+    const walking = new AMap.Walking({ map: amapMap, hideMarkers: true });
+    walking.search([d.start.lng, d.start.lat], [d.building.lng, d.building.lat], (status) => {
+      if (status !== 'complete') {
+        box.style.display = 'none';
+        svg.style.display = 'block';
+      }
+    });
+    amapMap.setFitView();
+  }
   const sel = document.getElementById('buildingSel');
 
   function render(d) {
@@ -92,6 +129,7 @@
     const end = document.getElementById('outEnd'); end.setAttribute('cx', ex); end.setAttribute('cy', ey);
     const label = document.getElementById('outEndLabel'); label.setAttribute('x', ex); label.setAttribute('y', Math.max(24, ey - 18)); label.textContent = b.name;
     document.getElementById('outDirection').textContent = '向' + d.direction + '步行约 ' + d.distance_m + ' 米';
+    if (amapReady) drawAmap(d);
   }
 
   async function loadRoute(lat, lng) {
@@ -115,6 +153,7 @@
       { timeout: 6000, maximumAge: 60000 }
     );
   });
+  if (AMAP_KEY) loadAmap();
   loadRoute().then(() => {
     // 首次进入时用接口返回的建筑列表填充下拉
     if (!sel.options.length && current && current.buildings) {

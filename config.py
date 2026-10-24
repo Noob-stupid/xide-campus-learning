@@ -5,6 +5,28 @@
 """
 import os
 
+
+def _load_dotenv():
+    """读取项目根目录 .env（gitignored），不覆盖已有环境变量。"""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+    if not os.path.exists(path):
+        return
+    try:
+        for raw in open(path, encoding='utf-8'):
+            line = raw.strip()
+            if not line or line.startswith('#') or '=' not in line:
+                continue
+            k, v = line.split('=', 1)
+            k = k.strip()
+            v = v.strip().strip('"').strip("'")
+            if k and k not in os.environ:
+                os.environ[k] = v
+    except Exception:
+        pass
+
+
+_load_dotenv()
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("ZX_DATA_DIR") or os.path.join(BASE_DIR, "data")
 DB_PATH = os.path.join(DATA_DIR, "zhixue.db")
