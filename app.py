@@ -28,6 +28,7 @@ NAV = [
     ('upload', '交棒', '/upload', 'upload'),
     ('review', '审核', '/review', 'shield'),
     ('workflow', '编排', '/workflow', 'flow'),
+    ('ai', 'AI 设置', '/admin/ai', 'spark'),
     ('profile', '我的', '/profile', 'user'),
 ]
 
@@ -35,7 +36,7 @@ ROLE_NAV = {
     'student': ['home', 'seats', 'nav', 'learn', 'pool', 'upload', 'profile'],
     'teacher': ['home', 'seats', 'nav', 'learn', 'pool', 'upload', 'profile'],
     'reviewer': ['home', 'nav', 'review', 'pool', 'workflow', 'profile'],
-    'admin': ['home', 'seats', 'nav', 'review', 'workflow', 'pool', 'profile'],
+    'admin': ['home', 'seats', 'nav', 'review', 'workflow', 'ai', 'pool', 'profile'],
 }
 
 
@@ -168,6 +169,13 @@ def review_detail_page(cid):
 @login_required
 def workflow_page():
     return render_template('workflow.html', active='workflow')
+
+
+@app.route('/admin/ai')
+@login_required
+@role_required('admin')
+def ai_settings_page():
+    return render_template('ai_settings.html', active='ai', ai_status=llm.status())
 
 
 @app.route('/profile')
@@ -691,6 +699,32 @@ def api_outdoor():
         'amap_configured': bool(AMAP_JS_KEY),
     })
     return jsonify(info)
+
+
+@app.route('/api/admin/ai')
+@login_required
+@role_required('admin')
+def api_admin_ai_status():
+    return jsonify(llm.status())
+
+
+@app.route('/api/admin/ai', methods=['POST'])
+@login_required
+@role_required('admin')
+def api_admin_ai_save():
+    d = request.get_json(silent=True) or {}
+    try:
+        return jsonify(llm.save_config(d.get('providers') or [], d.get('active_id') or ''))
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+
+
+@app.route('/api/admin/ai/test', methods=['POST'])
+@login_required
+@role_required('admin')
+def api_admin_ai_test():
+    d = request.get_json(silent=True) or {}
+    return jsonify(llm.test_provider(d.get('provider')))
 
 
 # ---------------- workflow / stats ----------------

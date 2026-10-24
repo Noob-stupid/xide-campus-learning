@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+{% from 'base.html' import icon %}
+{% block title %}AI 设置{% endblock %}
+{% block page_title %}AI 设置 · 模型与供应商{% endblock %}
+{% block eyebrow %}管理后台 · 免重启切换{% endblock %}
+{% block content %}
+<div class="stack">
+  <section class="card">
+    <div class="card-head">
+      <h3>当前 AI 状态</h3>
+      <span class="badge {{ 'green' if ai_status.available else 'gray' }}" id="aiBadge">{{ 'AI 已启用' if ai_status.available else '规则兜底' }}</span>
+    </div>
+    <div class="card-body">
+      <div class="row between wrap" style="gap:12px">
+        <div>
+          <b id="activeName">{{ ai_status.active.name if ai_status.active else '未配置供应商' }}</b>
+          <div class="small muted" id="activeMeta">{{ ai_status.active.base_url if ai_status.active else '配置 Base URL、模型和 Key 后自动启用' }}</div>
+        </div>
+        <div class="row wrap" style="gap:8px">
+          <button class="btn soft sm" id="testBtn">{{ icon('spark') }} 测试当前供应商</button>
+          <button class="btn primary sm" id="saveBtn">保存并生效</button>
+        </div>
+      </div>
+      <div class="small muted" id="testResult" style="margin-top:10px"></div>
+      <div class="small muted" id="lastError" style="margin-top:6px">{{ ai_status.last_error or '' }}</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h3>供应商与自动切换</h3>
+      <div class="row" style="gap:8px">
+        <select class="input" id="activeSel" style="width:190px"></select>
+        <button class="btn ghost sm" id="addBtn">+ 添加供应商</button>
+      </div>
+    </div>
+    <div class="card-body stack" id="providersBox"></div>
+    <div class="card-body small muted">
+      按优先级从上到下尝试；当前供应商失败会自动切到下一个。Key 只保存在数据库，不会回显完整值。
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  let AI = {{ ai_status|tojson }};
+  const box = document.getElementById('providersBox');
+  const activeSel = document.getElementById('activeSel');
+
+  function esc(v) { return ZX.escapeHtml(v == null ? '' : String(v)); }
+
+  function render() {
+    const list = AI.providers || [];
+    if (!list.length) {
+      box.innerHTML = '<div class="empty"><b>还没有供应商</b><span>添加一个 OpenAI 兼容接口，例如华为云 MaaS 的 /v1 地址。</span></div>';
+    } else {
+      box.innerHTML = list.map((p, i) => `
+        <div class="card" data-i="${i}" data-id="${esc(p.id)}" style="box-shadow:none;border:1px solid var(--line)">
+          <div class="card-head">
+            <b>供应商 ${i + 1}</b>
+            <button class="btn ghost sm" data-del="${i}">删除</button>
+          </div>
+          <div class="card-body form">
+            <div class="field"><label>名称</label><input class="input" data-f="name" value="${esc(p.name)}"></div>
+            <div class="field"><label>Base URL（含 /v1）</label><input class="input" data-f="base_url" value="${esc(p.base_url)}" placeholder="https://xxx/v1"></div>
+            <div class="field"><label>模型名</label><input class="input" data-f="model" value="${esc(p.model)}" placeholder="deepseek-chat"></div>
+            <div class="field"><label>API Key</label><input class="input" type="password" data-f="api_key" value="" placeholder="${p.api_key ? '已保存，留空表示不修改' : '粘贴 API Key'}"></div>
+            <div class="field-row">
+              <div class="field"><label>优先级（越小越先）</label><input class="input" type="number" data-f="priority" value="${p.priority || 50}"></div>
+              <label class="check-item"><input type="checkbox" data-f="enabled" ${p.enabled ? 'checked' : ''}> 启用</label>
+            </div>
+          </div>
+        </div>`).join('');
+    }
+    activeSel.innerHTML = list.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+    if (AI.active && AI.active.id) activeSel.value = AI.active.id;
+    document.getElementById('aiBadge').textContent = AI.available ? 'AI 已启用' : '规则兜底';
+    document.getElementById('aiBadge').className = 'badge ' + (AI.available ? 'green' : 'gray');
+    document.getElementById('activeName').textContent = AI.active ? AI.active.name : '未配置供应商';
+    document.getElementById('activeMeta').textContent = AI.active ? (AI.active.base_url + ' · ' + AI.active.model) : '配置 Base URL、模型和 Key 后自动启用';
+    document.getElementById('lastError').textContent = AI.last_error || '';
+  }
+
+  function collect() {
+    return Array.from(box.querySelectorAll('.card[data-id]')).map((el, i) => ({
+      id: el.dataset.id || ('p' + i),
+      name: el.querySelector('[data-f="name"]').value.trim(),
+      base_url: el.querySelector('[data-f="base_url"]').value.trim(),
+      model: el.querySelector('[data-f="model"]').value.trim(),
+      api_key: el.querySelector('[data-f="api_key"]').value,
+      priority: Number(el.querySelector('[data-f="priority"]').value || 50),
+      enabled: el.querySelector('[data-f="enabled"]').checked
+    }));
+  }
+
+  async function load() {
+    try {
+      AI = await ZX.api('/api/admin/ai');
+      render();
+    } catch (e) { ZX.toast(e.message, 'err'); }
+  }
+
+  document.getElementById('addBtn').addEventListener('click', () => {
+    AI.providers = AI.providers || [];
+    AI.providers.push({ id: 'p' + Date.now(), name: '新供应商', base_url: '', model: '', api_key: '', enabled: true, priority: 50 });
+    render();
+  });
+
+  box.addEventListener('click', e => {
+    const btn = e.target.closest('[data-del]');
+    if (!btn) return;
+    const i = Number(btn.getAttribute('data-del'));
+    AI.providers.splice(i, 1);
+    render();
+  });
+
+  document.getElementById('saveBtn').addEventListener('click', async () => {
+    try {
+      AI = await ZX.api('/api/admin/ai', { method: 'POST', body: { providers: collect(), active_id: activeSel.value } });
+      render();
+      ZX.toast('AI 配置已保存，立即生效');
+    } catch (e) { ZX.toast(e.message, 'err'); }
+  });
+
+  document.getElementById('testBtn').addEventListener('click', async () => {
+    const list = collect();
+    const p = list.find(x => x.id === activeSel.value) || list[0];
+    if (!p) { ZX.toast('先添加供应商', 'warn'); return; }
+    const out = document.getElementById('testResult');
+    out.textContent = '测试中…';
+    try {
+      const r = await ZX.api('/api/admin/ai/test', { method: 'POST', body: { provider: p } });
+      out.textContent = r.ok ? '✓ ' + r.provider + ' 可用 · ' + r.latency_ms + 'ms' : '✗ ' + (r.error || '失败');
+    } catch (e) { out.textContent = '✗ ' + e.message; }
+  });
+
+  activeSel.addEventListener('change', () => {
+    const p = (AI.providers || []).find(x => x.id === activeSel.value);
+    if (p) { document.getElementById('activeName').textContent = p.name; document.getElementById('activeMeta').textContent = p.base_url + ' · ' + p.model; }
+  });
+
+  load();
+</script>
+{% endblock %}

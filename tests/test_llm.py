@@ -29,3 +29,23 @@ def test_rerank_falls_back_when_model_returns_bad_json(monkeypatch):
     monkeypatch.setattr(llm, 'available', lambda: True)
     monkeypatch.setattr(llm, 'chat', lambda *a, **k: '我不知道')
     assert llm.rerank({'subject': '高等数学'}, [{'id': 1, 'title': 'A'}]) is None
+
+
+def test_mask_key_keeps_edges():
+    assert llm._mask('sk-1234567890') == 'sk-1****7890'
+    assert llm._mask('short') == '****'
+
+
+def test_chat_failover_tries_next_provider(monkeypatch):
+    providers = [
+        {'id': 'a', 'name': 'A', 'base_url': 'https://a/v1', 'model': 'm', 'api_key': 'k', 'enabled': True, 'priority': 1},
+        {'id': 'b', 'name': 'B', 'base_url': 'https://b/v1', 'model': 'm', 'api_key': 'k', 'enabled': True, 'priority': 2},
+    ]
+    monkeypatch.setattr(llm, '_load_providers', lambda include_secrets=True: providers)
+    calls = []
+    def fake_call(p, *args, **kwargs):
+        calls.append(p['id'])
+        return None if p['id'] == 'a' else 'ok'
+    monkeypatch.setattr(llm, '_call_provider', fake_call)
+    assert llm.chat([{'role': 'user', 'content': 'hi'}]) == 'ok'
+    assert calls == ['a', 'b']
