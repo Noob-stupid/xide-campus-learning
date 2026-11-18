@@ -75,14 +75,20 @@ def status(floor_id=1):
     return out
 
 
-def device_occupied_map(floor_id=1):
+def device_occupied_map(floor_id=None):
+    """每张座位最新一次上报的占位状态；floor_id 为空则返回全部楼层。
+
+    用 GROUP BY 取每座 MAX(id)，避免某个座位高频上报把其他座位的记录挤出 LIMIT 窗口。
+    """
     ensure_tables()
-    rows = db.query('SELECT seat_id, occupied, created_at FROM seat_events ORDER BY id DESC LIMIT 200')
-    seen = {}
-    for r in rows:
-        if r['seat_id'] not in seen:
-            seen[r['seat_id']] = bool(r['occupied'])
-    return seen
+    sql = ('SELECT e.seat_id, e.occupied FROM seat_events e '
+           'JOIN (SELECT seat_id, MAX(id) AS max_id FROM seat_events GROUP BY seat_id) m '
+           'ON m.seat_id=e.seat_id AND m.max_id=e.id')
+    args = ()
+    if floor_id is not None:
+        sql += ' JOIN seats s ON s.id=e.seat_id WHERE s.floor_id=?'
+        args = (int(floor_id),)
+    return {r['seat_id']: bool(r['occupied']) for r in db.query(sql, args)}
 
 
 def _protocol_config(dev):

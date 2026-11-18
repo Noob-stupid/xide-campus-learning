@@ -8,6 +8,7 @@
 不配置时 available() 为 False，所有调用方自动回退规则引擎。
 """
 import json
+import os
 import re
 import time
 import urllib.error
@@ -101,6 +102,8 @@ def active_provider():
 
 
 def available():
+    if os.environ.get('ZX_DISABLE_LLM') == '1':
+        return False
     return active_provider() is not None
 
 

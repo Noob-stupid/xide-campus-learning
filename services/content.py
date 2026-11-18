@@ -97,14 +97,24 @@ def _cover_ratio(query, text):
 
 
 def _write_jpeg(path, img):
-    """cv2.imwrite 在中文路径下会静默失败，统一走 imencode + 二进制写。"""
+    """优先 cv2.imencode（中文路径可靠）；没有 opencv 时回退 PIL，降级链路不依赖 cv2。"""
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    ok, buf = cv2.imencode('.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
-    if not ok:
+    if HAS_CV2 and cv2 is not None:
+        try:
+            ok, buf = cv2.imencode('.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
+            if ok:
+                with open(path, 'wb') as fh:
+                    fh.write(buf.tobytes())
+                return True
+        except Exception:
+            pass
+    try:
+        from PIL import Image
+        rgb = img[:, :, ::-1] if getattr(img, 'ndim', 0) == 3 else img
+        Image.fromarray(rgb).save(path, 'JPEG', quality=88)
+        return True
+    except Exception:
         return False
-    with open(path, 'wb') as fh:
-        fh.write(buf.tobytes())
-    return True
 
 
 def _mmss(sec):
@@ -161,7 +171,6 @@ def _placeholder_frame(out_dir, text):
         arr = np.array(img)[:, :, ::-1].copy()
     except Exception:
         arr = np.full((h, w, 3), 235, np.uint8)
-        cv2.putText(arr, 'NO FRAMES', (40, 180), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (60, 60, 60), 2)
     path = os.path.join(out_dir, 'f_00.jpg')
     _write_jpeg(path, arr)
     return path

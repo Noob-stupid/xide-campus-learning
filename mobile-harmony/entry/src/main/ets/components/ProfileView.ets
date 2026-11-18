@@ -1,4 +1,4 @@
-import { Api, BASE_URL } from '../net/Api';
+import { Api } from '../net/Api';
 import { Theme } from '../common/Theme';
 import { Fmt } from '../common/Format';
 import { UserInfo, StudySession, ContentInfo, RelayPush } from '../model/Types';
@@ -85,7 +85,7 @@ export struct ProfileView {
 
   avatarUrl(): string {
     if (this.user && this.user.avatar_url && this.user.avatar_url.length > 0) {
-      return BASE_URL + this.user.avatar_url;
+      return Api.baseUrl + this.user.avatar_url;
     }
     return '';
   }

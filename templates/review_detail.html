@@ -100,6 +100,13 @@
     if (decision === 'approve' && !Object.values(checklist).every(Boolean)) {
       ZX.toast('通过前请勾选四项清单', 'err'); return;
     }
+    if (decision === 'approve') {
+      const pendingRisk = content.frames.filter(f => Number(f.risk) >= 0.55 && f.status === 'pending' && !frameStatus[f.id]);
+      if (pendingRisk.length) {
+        ZX.toast('还有 ' + pendingRisk.length + ' 个可疑帧未复核，请先逐帧清除或标记', 'err');
+        return;
+      }
+    }
     const btn = decision === 'approve' ? document.getElementById('approveBtn') : document.getElementById('rejectBtn');
     btn.disabled = true; btn.textContent = '提交中…';
     try {

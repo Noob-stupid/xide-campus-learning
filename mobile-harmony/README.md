@@ -55,6 +55,6 @@ HarmonyOS NEXT 工程：原生 ArkUI 主界面 + Web 兜底页。
 
 ## 下一步
 
-1. 部署 HTTPS，替换 `BASE_URL`；
+1. 部署 HTTPS，替换 `BASE_URL`，或在首选项写入 `base_url` 覆盖；
 2. 用 DevEco 编译、签名、真机跑通；
 3. 需要纯原生上传时，再按 `docs/移动端功能交接文档.md` 接 `photoAccessHelper` / `request.uploadFile`。

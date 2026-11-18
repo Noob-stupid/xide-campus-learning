@@ -143,18 +143,18 @@ def test_empty_text_is_unknown_not_crash(seeded):
 # ---------------------------------------------------------------- agents: 各意图的数据
 
 def test_find_seat_only_returns_free(seeded):
-    r = agents.ask('有没有靠窗的空位', seeded['user_id'])
+    r = agents.ask('有空位吗', seeded['user_id'])
     assert r['intent'] == 'find_seat'
     seats = r['data']['seats']
     assert seats, '应该有空位'
     assert all(s['status'] == 'free' for s in seats)
     codes = {s['code'] for s in seats}
-    assert 'A12' in codes
+    assert 'B07' in codes
+    assert 'A12' not in codes                       # 自己正在使用的座位不算空位
     assert 'C09' not in codes                       # maintenance 座位不能出现
-    assert r['data']['prefer'] == 'window'
     assert r['data']['free_total'] >= 1
-    assert r['slots']['seat_code'] == 'A12'
-    assert 'A12' in r['reply']
+    assert r['slots']['seat_code'] == 'B07'
+    assert 'B07' in r['reply']
     assert any('query_seats' == c['tool'] for c in r['tool_calls'])
 
 
@@ -197,14 +197,14 @@ def test_recommend_content_only_approved(seeded):
 
 def test_book_seat_returns_draft_and_does_not_write(seeded):
     before = len(db.query('SELECT id FROM reservations'))
-    r = agents.ask('帮我约明天 19:00 的 A12 座位', seeded['user_id'])
+    r = agents.ask('帮我约明天 19:00 的 B07 座位', seeded['user_id'])
 
     assert r['intent'] == 'book_seat'
     assert len(db.query('SELECT id FROM reservations')) == before   # 只给草稿，不写库
 
     draft = r['data']['draft']
-    assert draft['seat_id'] == seeded['seat_id']
-    assert draft['seat_code'] == 'A12'
+    assert draft['seat_id'] == seeded['seat_free_id']
+    assert draft['seat_code'] == 'B07'
     tomorrow = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
     assert draft['start_at'].startswith(tomorrow)
     assert ':19:00:00' in draft['start_at'] or '19:00:00' in draft['start_at']
@@ -219,6 +219,15 @@ def test_book_seat_rejects_maintenance_seat(seeded):
     assert r['data']['draft'] is None
     assert '不可约' in r['reply']
     assert r['data']['seat']['code'] == 'C09'
+
+
+def test_book_seat_rejects_occupied_seat(seeded):
+    """B1：按号码预约时也要校验实时占用，不能给出可约草稿。"""
+    r = agents.ask('帮我约 A12', seeded['user_id'])
+    assert r['intent'] == 'book_seat'
+    assert r['data']['draft'] is None
+    assert ('已被预约' in r['reply']) or ('正在使用' in r['reply'])
+    assert r['data']['seat']['code'] == 'A12'
 
 
 def test_book_seat_without_code_offers_candidates(seeded):
@@ -257,11 +266,29 @@ def test_rules_cancel_topic(seeded):
 
 def test_find_seat_gives_reason(seeded):
     """PRODUCT §3：座位推荐必须给「为什么」。"""
-    r = agents.ask('有没有靠窗的空位', seeded['user_id'])
+    r = agents.ask('有空位吗', seeded['user_id'])
     top = r['data']['seats'][0]
     assert top['reason']
-    assert '靠窗' in top['reason']
     assert '空闲' in top['reason']
+    assert '普通区' in top['reason']
+
+
+def test_find_seat_excludes_other_users_booking(seeded):
+    """B1：实时被占用的座位不能出现在「空位」里。"""
+    other = db.execute(
+        'INSERT INTO users(username,password_hash,name,role,college,created_at) VALUES(?,?,?,?,?,?)',
+        ('other', 'x', '另一位同学', 'student', '', db.now()))
+    start_at = (datetime.now() - timedelta(minutes=1)).strftime(FMT)
+    end_at = (datetime.now() + timedelta(minutes=60)).strftime(FMT)
+    db.execute(
+        'INSERT INTO reservations(user_id,seat_id,subject,goal,start_at,end_at,status,source,created_at) '
+        "VALUES(?,?,?,?,?,?,'booked','web',?)",
+        (other, seeded['seat_free_id'], '英语', '', start_at, end_at, db.now()))
+
+    r = agents.ask('有空位吗', seeded['user_id'])
+    codes = {s['code'] for s in r['data']['seats']}
+    assert 'B07' not in codes
+    assert r['data']['free_total'] == 0
 
 
 def test_recommend_gives_reason(seeded):

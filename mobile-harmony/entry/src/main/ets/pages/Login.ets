@@ -6,8 +6,8 @@ import { Theme } from '../common/Theme';
 @Entry
 @Component
 struct Login {
-  @State username: string = 'student';
-  @State password: string = '123456';
+  @State username: string = '';
+  @State password: string = '';
   @State busy: boolean = false;
   @State error: string = '';
 

@@ -1,4 +1,4 @@
-import { Api, BASE_URL } from '../net/Api';
+import { Api } from '../net/Api';
 import { Theme } from '../common/Theme';
 import { Fmt } from '../common/Format';
 import { ContentInfo } from '../model/Types';
@@ -44,7 +44,7 @@ export struct PoolView {
 
   coverUrl(c: ContentInfo): string {
     if (c.cover_url && c.cover_url.length > 0) {
-      return BASE_URL + c.cover_url;
+      return Api.baseUrl + c.cover_url;
     }
     return '';
   }

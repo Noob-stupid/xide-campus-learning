@@ -23,23 +23,26 @@ def _fallback_match(session):
     out = []
     for r in rows:
         d = dict(r)
-        score = 0.0
         why = []
+        b_subject = 0.0
         if subject and subject in (d.get('subject') or ''):
-            score += 0.45
+            b_subject = 0.45
             why.append('主题匹配')
-        if stuck and (d.get('knowledge_point') or '') and any(k in stuck for k in (d.get('knowledge_point') or '').split(',')):
-            score += 0.25
+        kp = d.get('knowledge_point') or ''
+        b_stuck = 0.0
+        if stuck and kp and any(k in stuck for k in kp.split(',')):
+            b_stuck = 0.25
             why.append('命中你的卡点')
         dur = d.get('duration_sec') or 0
+        b_duration = 0.0
         if 60 <= dur <= 600:
-            score += 0.15
+            b_duration = 0.15
             why.append('%d 分钟适合课间' % max(1, round(dur / 60)))
-        score += 0.1
-        d['score'] = round(min(score, 1.0), 2)
+        breakdown = {'subject': b_subject, 'stuck': b_stuck,
+                     'duration': b_duration, 'quality': 0.1}
+        d['score'] = round(min(sum(breakdown.values()), 1.0), 2)
         d['reason'] = ' · '.join(why) if why else '已通过人工复核，适合自习后观看'
-        d['breakdown'] = {'subject': 0.45 if subject and subject in (d.get('subject') or '') else 0,
-                          'stuck': 0.25 if stuck else 0, 'duration': 0.15, 'quality': 0.1}
+        d['breakdown'] = breakdown
         out.append(d)
     out.sort(key=lambda x: x['score'], reverse=True)
     return out[:5]
@@ -156,7 +159,15 @@ def feedback(push_id, user_id, value):
     if not p:
         raise ValueError('接力卡不存在')
     value = 'helpful' if value in ('helpful', 'up', '1', True) else 'unhelpful'
+    old = p['feedback']
+    if old == value:
+        return {'ok': True, 'feedback': value, 'noop': True}
     db.execute('UPDATE relay_pushes SET feedback=? WHERE id=?', (value, push_id))
+    # 反馈变化时先回退旧计数，再累加新计数，避免重复点击把内容计数越点越高
+    if old == 'helpful':
+        db.execute('UPDATE contents SET helpful=helpful-1 WHERE id=? AND helpful>0', (p['content_id'],))
+    elif old == 'unhelpful':
+        db.execute('UPDATE contents SET unhelpful=unhelpful-1 WHERE id=? AND unhelpful>0', (p['content_id'],))
     col = 'helpful' if value == 'helpful' else 'unhelpful'
     db.execute('UPDATE contents SET %s=%s+1 WHERE id=?' % (col, col), (p['content_id'],))
     return {'ok': True, 'feedback': value}

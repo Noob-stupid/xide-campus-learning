@@ -6,18 +6,47 @@ import time
 import uuid
 from datetime import datetime, timedelta
 from functools import wraps
+from urllib.parse import urlparse
 
 from flask import (Flask, abort, jsonify, redirect, render_template, request,
                    send_from_directory, session, url_for)
 
 import db
 import seed
-from config import (AMAP_JS_KEY, AMAP_SECURITY_CODE, DATA_DIR, HOST, MAX_FRAMES, MEDIA_DIR, PORT, SECRET_KEY, UPLOAD_DIR)
+from config import (AMAP_JS_KEY, AMAP_SECURITY_CODE, DATA_DIR, HOST, MAX_FRAMES, MEDIA_DIR, PORT, SECRET_KEY, SENSOR_TOKEN, SUSPICIOUS_RISK, UPLOAD_DIR)
 from services import devices, flow, llm, navigation, outdoor, relay, seats
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.secret_key = SECRET_KEY
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_SECURE=(os.environ.get('ZX_COOKIE_SECURE') == '1'),
+)
+
+
+@app.before_request
+def _reject_cross_site():
+    """跨站写请求防护：浏览器带 Origin 时必须同源；移动端/脚本无 Origin 放行。"""
+    if request.method in ('GET', 'HEAD', 'OPTIONS'):
+        return None
+    origin = request.headers.get('Origin')
+    if not origin:
+        return None
+    host = urlparse(origin).netloc
+    if host and host != request.host:
+        return jsonify({'ok': False, 'error': '跨站请求被拒绝'}), 403
+    return None
+
+
+@app.after_request
+def _security_headers(resp):
+    resp.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    resp.headers.setdefault('X-Frame-Options', 'DENY')
+    resp.headers.setdefault('Referrer-Policy', 'same-origin')
+    return resp
+
 
 db.init_db()
 
@@ -133,7 +162,7 @@ def seats_page():
 @app.route('/nav')
 @login_required
 def nav_page():
-    return render_template('nav.html', active='seats')
+    return render_template('nav.html', active='nav')
 
 
 @app.route('/learn')
@@ -243,7 +272,7 @@ def api_me():
 @login_required
 def api_seats():
     u = current_user()
-    fid = int(request.args.get('floor_id', 0) or 0)
+    fid = request.args.get('floor_id', type=int) or 0
     if not db.one('SELECT id FROM floors WHERE id=?', (fid,)):
         fr = db.one('SELECT id FROM floors ORDER BY id LIMIT 1')
         fid = fr['id'] if fr else 0
@@ -385,7 +414,7 @@ def api_my_reservations():
 @app.route('/api/nav')
 @login_required
 def api_nav():
-    seat_id = int(request.args.get('seat_id', 0))
+    seat_id = request.args.get('seat_id', type=int) or 0
     s = seats.seat_by_id(seat_id)
     if not s:
         return jsonify({'ok': False, 'error': '座位不存在'}), 404
@@ -478,6 +507,14 @@ def api_agent_ask():
 
 def _sensor_envelope(data=None, message='ok', code=200):
     return jsonify({'code': code, 'message': message, 'data': data if data is not None else {}}), (200 if code < 400 else code)
+
+
+def _sensor_authorized():
+    """配置了 ZX_SENSOR_TOKEN 时，设备上报需带 X-Sensor-Token（或 ?token=）。"""
+    if not SENSOR_TOKEN:
+        return True
+    sent = request.headers.get('X-Sensor-Token') or request.args.get('token') or ''
+    return sent == SENSOR_TOKEN
 
 
 def _content_dict(r):
@@ -617,9 +654,29 @@ def api_review_decision(cid):
         return jsonify({'ok': False, 'error': 'decision 必须是 approve 或 reject'}), 400
     checklist = d.get('checklist') or {}
     frame_status = d.get('frame_status') or {}
+    # 可疑帧必须人工逐帧给出结论，避免“一键通过”绕过帧级复核
+    if decision == 'approve':
+        explicit = set()
+        for key, val in frame_status.items():
+            if str(val).strip().lower() not in ('cleared', 'flagged'):
+                continue
+            try:
+                explicit.add(int(key))
+            except (TypeError, ValueError):
+                continue
+        risky = db.query('SELECT id, idx FROM content_frames WHERE content_id=? AND risk>=?',
+                         (cid, SUSPICIOUS_RISK))
+        missing = [dict(f) for f in risky
+                   if f['id'] not in explicit and f['idx'] not in explicit]
+        if missing:
+            return jsonify({'ok': False,
+                            'error': '还有 %d 个可疑帧未复核，请先逐帧选择“清除”或“标记”' % len(missing)}), 400
     for fid, st in frame_status.items():
         if st in ('cleared', 'flagged', 'pending'):
-            db.execute('UPDATE content_frames SET status=? WHERE id=? AND content_id=?', (st, int(fid), cid))
+            try:
+                db.execute('UPDATE content_frames SET status=? WHERE id=? AND content_id=?', (st, int(fid), cid))
+            except (TypeError, ValueError):
+                continue
     try:
         from services import content as content_svc
         out = content_svc.review(cid, u['id'], decision, d.get('note', ''), checklist, frame_status)
@@ -704,8 +761,13 @@ def api_messages():
 def api_messages_read():
     u = current_user()
     d = request.get_json(silent=True) or {}
-    if d.get('id'):
-        db.execute('UPDATE messages SET read=1 WHERE id=? AND user_id=?', (int(d['id']), u['id']))
+    raw = d.get('id')
+    if raw is not None and str(raw).strip() != '':
+        try:
+            mid = int(raw)
+        except (TypeError, ValueError):
+            return jsonify({'ok': False, 'error': 'id 必须是数字'}), 400
+        db.execute('UPDATE messages SET read=1 WHERE id=? AND user_id=?', (mid, u['id']))
     else:
         db.execute('UPDATE messages SET read=1 WHERE user_id=?', (u['id'],))
     return jsonify({'ok': True})
@@ -867,10 +929,12 @@ def api_flow_run(rid):
 @login_required
 def api_stats():
     total = db.one('SELECT COUNT(*) c FROM seats')['c']
-    fr = db.one('SELECT id FROM floors ORDER BY id LIMIT 1')
+    occ = devices.device_occupied_map()
     free = 0
     for _f in db.query('SELECT id FROM floors'):
-        free += sum(1 for _s in seats.seat_rows(_f['id']) if _s['live_status'] == 'free')
+        for _s in seats.seat_rows(_f['id']):
+            if _s['live_status'] == 'free' and not occ.get(_s['id']):
+                free += 1
     pending = db.one("SELECT COUNT(*) c FROM contents WHERE status='pending_review'")['c']
     approved = db.one("SELECT COUNT(*) c FROM contents WHERE status='approved'")['c']
     today = datetime.now().strftime('%Y-%m-%d')
@@ -906,6 +970,8 @@ def api_devices_simulate():
 
 @app.route('/api/sensor/device/register', methods=['POST'])
 def api_sensor_device_register():
+    if not _sensor_authorized():
+        return _sensor_envelope(None, '设备鉴权失败', 401)
     d = request.get_json(silent=True) or {}
     try:
         return _sensor_envelope(devices.register_protocol(d.get('device_id')))
@@ -915,6 +981,8 @@ def api_sensor_device_register():
 
 @app.route('/api/sensor/device_config')
 def api_sensor_device_config():
+    if not _sensor_authorized():
+        return _sensor_envelope(None, '设备鉴权失败', 401)
     try:
         return _sensor_envelope(devices.protocol_config(request.args.get('device_id', '')))
     except Exception as e:
@@ -922,6 +990,8 @@ def api_sensor_device_config():
 
 @app.route('/api/sensor/report', methods=['POST'])
 def api_sensor_report():
+    if not _sensor_authorized():
+        return _sensor_envelope(None, '设备鉴权失败', 401)
     d = request.get_json(silent=True) or {}
     try:
         if 'ir_front' in d or 'ir_back' in d:
@@ -938,6 +1008,7 @@ def api_sensor_report():
 
 @app.route('/api/demo/expire', methods=['POST'])
 @login_required
+@role_required('student', 'teacher', 'admin')
 def api_demo_expire():
     """演示：把当前用户进行中的预约结束时间改到现在，触发自动结束 + 接棒。"""
     u = current_user()
@@ -973,6 +1044,10 @@ def uploaded_file(filename):
 
 @app.route('/media/<path:filename>')
 def media(filename):
+    # 视频需登录；图片（头像/封面/底图/关键帧）保持匿名可读，兼容移动端 Image 组件不带 Cookie
+    if not filename.lower().endswith(('.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg')):
+        if not current_user():
+            abort(401)
     return send_from_directory(MEDIA_DIR, filename)
 
 

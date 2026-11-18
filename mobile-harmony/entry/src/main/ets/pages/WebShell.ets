@@ -1,5 +1,5 @@
 import { webview } from '@kit.ArkWeb';
-import { BASE_URL } from '../net/Api';
+import { Api } from '../net/Api';
 import { router } from '@kit.ArkUI';
 
 interface ShellParams {
@@ -13,12 +13,12 @@ struct WebShell {
   controller: webview.WebviewController = new webview.WebviewController();
   @State loading: boolean = true;
   @State errorText: string = '';
-  private webUrl: string = BASE_URL;
+  private webUrl: string = Api.baseUrl;
 
   aboutToAppear(): void {
     const p = router.getParams() as ShellParams;
     if (p && p.path) {
-      this.webUrl = BASE_URL + p.path;
+      this.webUrl = Api.baseUrl + p.path;
     }
   }
 

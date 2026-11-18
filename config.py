@@ -4,25 +4,44 @@
 所有路径都从本文件位置推导，换机器/换盘符无需改代码。
 """
 import os
+import secrets
+
+
+_ALIASES = {
+    'DEEPSEEK_BASE_URL': 'ZX_LLM_BASE_URL',
+    'DEEPSEEK_API_KEY': 'ZX_LLM_API_KEY',
+    'DEEPSEEK_MODEL': 'ZX_LLM_MODEL',
+}
 
 
 def _load_dotenv():
-    """读取项目根目录 .env（gitignored），不覆盖已有环境变量。"""
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
-    if not os.path.exists(path):
-        return
-    try:
-        for raw in open(path, encoding='utf-8'):
-            line = raw.strip()
-            if not line or line.startswith('#') or '=' not in line:
-                continue
-            k, v = line.split('=', 1)
-            k = k.strip()
-            v = v.strip().strip('"').strip("'")
-            if k and k not in os.environ:
-                os.environ[k] = v
-    except Exception:
-        pass
+    """读取项目根 .env 与 .codearts-agent.env，不覆盖已有环境变量。
+
+    .codearts-agent.env 里的 DEEPSEEK_* 会额外映射为应用使用的 ZX_LLM_*，
+    这样本地/CodeArts 已有的模型配置无需复制。
+    """
+    base = os.path.dirname(os.path.abspath(__file__))
+    for name in ('.env', '.codearts-agent.env'):
+        path = os.path.join(base, name)
+        if not os.path.exists(path):
+            continue
+        try:
+            for raw in open(path, encoding='utf-8'):
+                line = raw.strip()
+                if not line or line.startswith('#') or '=' not in line:
+                    continue
+                k, v = line.split('=', 1)
+                k = k.strip()
+                v = v.strip().strip('"').strip("'")
+                if not k:
+                    continue
+                if k not in os.environ:
+                    os.environ[k] = v
+                target = _ALIASES.get(k)
+                if target and target not in os.environ:
+                    os.environ[target] = v
+        except Exception:
+            pass
 
 
 _load_dotenv()
@@ -35,7 +54,34 @@ UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
 
 HOST = os.environ.get("ZX_HOST", "0.0.0.0")
 PORT = int(os.environ.get("ZX_PORT", "5820"))
-SECRET_KEY = os.environ.get("ZX_SECRET_KEY", "zhixue-space-demo-2026")
+def _secret_key():
+    """优先环境变量；否则在 data/ 下生成并复用随机 key，避免硬编码默认密钥。"""
+    env = os.environ.get("ZX_SECRET_KEY")
+    if env:
+        return env
+    path = os.path.join(DATA_DIR, ".secret_key")
+    try:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as fh:
+                val = fh.read().strip()
+            if val:
+                return val
+    except Exception:
+        pass
+    val = secrets.token_hex(32)
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(val)
+    except Exception:
+        pass
+    return val
+
+
+SECRET_KEY = _secret_key()
+
+# 设备上报（可选加固）：设置后 /api/sensor/* 需带 X-Sensor-Token
+SENSOR_TOKEN = os.environ.get("ZX_SENSOR_TOKEN", "")
 
 # 预约规则
 MAX_ACTIVE_RESERVATIONS = 1

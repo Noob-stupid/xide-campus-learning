@@ -5,7 +5,7 @@ import { LoginResp, MeResp, FloorsResp, SeatsResp, BookingResp, SessionResp,
   ReservationsResp, NavResp, ContentsResp, PushesResp, MessagesResp, StatsResp,
   TutorResp, AgentResp, OutdoorResp, ProfileResp, SimpleResp } from '../model/Types';
 
-/** TODO: 部署完成后改成你真实的 HTTPS 地址（必须 HTTPS，后端 Flask 走 session Cookie） */
+/** 默认服务器地址；部署时必须替换，或通过 Preferences 的 base_url 覆盖（见 Api.init）。 */
 export const BASE_URL: string = 'https://xide.example.com';
 
 interface LoginBody {
@@ -32,6 +32,9 @@ interface TutorAnswerBody {
 interface FeedbackBody {
   value: string;
 }
+interface IdBody {
+  id: number;
+}
 interface ProfileUpdateBody {
   name: string;
   college: string;
@@ -47,6 +50,8 @@ interface ProfileUpdateBody {
 export class Api {
   private static cookie: string = '';
   private static store: preferences.Preferences | undefined = undefined;
+  /** 运行时可覆盖的服务器地址（Preferences 的 base_url） */
+  static baseUrl: string = BASE_URL;
 
   static async init(ctx: common.Context): Promise<void> {
     try {
@@ -54,6 +59,10 @@ export class Api {
       const c = await Api.store.get('cookie', '');
       if (typeof c === 'string') {
         Api.cookie = c as string;
+      }
+      const b = await Api.store.get('base_url', '');
+      if (typeof b === 'string' && (b as string).length > 0) {
+        Api.baseUrl = b as string;
       }
     } catch (e) {
       Api.cookie = '';
@@ -127,7 +136,7 @@ export class Api {
       opts.extraData = JSON.stringify(body);
     }
     try {
-      const resp: http.HttpResponse = await req.request(BASE_URL + path, opts);
+      const resp: http.HttpResponse = await req.request(Api.baseUrl + path, opts);
       Api.captureCookie(resp);
       const r: Object | string | ArrayBuffer = resp.result;
       if (typeof r === 'string') {
@@ -251,7 +260,7 @@ export class Api {
   }
 
   static async messagesRead(id: number): Promise<SimpleResp> {
-    const body: TextBody = { text: id.toString() };
+    const body: IdBody = { id: id };
     const text: string = await Api.call(http.RequestMethod.POST, '/api/messages/read', body);
     return JSON.parse(text) as SimpleResp;
   }

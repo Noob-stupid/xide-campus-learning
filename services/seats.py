@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """座位、预约、签到、结束、到期扫描。"""
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import db
+from config import CHECKIN_TIMEOUT_MIN, MAX_DURATION_MIN, MIN_DURATION_MIN
 from . import flow
 
 _BOOK_LOCK = threading.RLock()
@@ -69,10 +70,10 @@ def book(user_id, seat_id, subject, goal, start_at, end_at):
     except Exception:
         raise ValueError('时间格式应为 YYYY-MM-DD HH:MM:SS')
     minutes = int((et - st).total_seconds() // 60)
-    if minutes < 1:
-        raise ValueError('预约时长至少 1 分钟')
-    if minutes > 240:
-        raise ValueError('单次预约最多 4 小时')
+    if minutes < MIN_DURATION_MIN:
+        raise ValueError('预约时长至少 %d 分钟' % MIN_DURATION_MIN)
+    if minutes > MAX_DURATION_MIN:
+        raise ValueError('单次预约最多 %d 分钟' % MAX_DURATION_MIN)
     if et <= datetime.now():
         raise ValueError('结束时间必须晚于现在')
 
@@ -136,6 +137,12 @@ def checkin(user_id, reservation_id):
         raise ValueError('预约不存在')
     if r['status'] != 'booked':
         raise ValueError('当前状态不能签到（%s）' % r['status'])
+    try:
+        start = db.parse(r['start_at'])
+    except Exception:
+        start = datetime.now()
+    if datetime.now() > start + timedelta(minutes=CHECKIN_TIMEOUT_MIN):
+        raise ValueError('已超过签到时限（%d 分钟），请重新预约' % CHECKIN_TIMEOUT_MIN)
     now = db.now()
     db.execute("UPDATE reservations SET status='checked_in', checkin_at=? WHERE id=?", (now, reservation_id))
     sid = db.execute(
@@ -186,6 +193,10 @@ def _end_reservation(reservation_id, reason='manual'):
     if not r or r['status'] not in ('booked', 'checked_in'):
         return None
     now = db.now()
+    if r['status'] == 'booked' and not r['checkin_at']:
+        # 未签到的预约直接结束：按取消处理，不生成 0 分钟场次，也不触发接棒
+        db.execute("UPDATE reservations SET status='cancelled', checkout_at=? WHERE id=?", (now, reservation_id))
+        return None
     db.execute("UPDATE reservations SET status='completed', checkout_at=? WHERE id=?", (now, reservation_id))
     sess = db.one('SELECT * FROM study_sessions WHERE reservation_id=? ORDER BY id DESC LIMIT 1', (reservation_id,))
     session_id = sess['id'] if sess else None
@@ -224,4 +235,14 @@ def sweep_expired():
     for r in rows:
         db.execute("UPDATE reservations SET status='no_show' WHERE id=?", (r['id'],))
         done.append({'reservation_id': r['id'], 'action': 'no_show'})
+    # 预约开始后超过签到时限仍未签到：释放座位并记爽约
+    deadline = (datetime.now() - timedelta(minutes=CHECKIN_TIMEOUT_MIN)).strftime('%Y-%m-%d %H:%M:%S')
+    rows = db.query("SELECT * FROM reservations WHERE status='booked' AND start_at <= ?", (deadline,))
+    for r in rows:
+        db.execute("UPDATE reservations SET status='no_show' WHERE id=? AND status='booked'", (r['id'],))
+        db.execute('INSERT INTO messages(user_id,kind,title,body,payload,read,created_at) VALUES(?,?,?,?,?,0,?)',
+                   (r['user_id'], 'system', '预约已失效',
+                    '预约开始后 %d 分钟未签到，座位已自动释放。' % CHECKIN_TIMEOUT_MIN,
+                    db.dumps({'reservation_id': r['id']}), db.now()))
+        done.append({'reservation_id': r['id'], 'action': 'no_show_checkin'})
     return done

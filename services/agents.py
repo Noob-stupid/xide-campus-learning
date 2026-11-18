@@ -228,6 +228,24 @@ def _user(user_id):
     return db.one('SELECT id,name,role,college FROM users WHERE id=?', (user_id,))
 
 
+def _busy_seat_ids():
+    """实时被占用/已预约的座位 id：进行中预约 + 设备最新占位。
+
+    seats.status 只是静态字段，不能反映“此刻是否有人/是否已被约”，
+    这里与 app.py 的 /api/seats 口径保持一致。
+    """
+    busy = {r['seat_id'] for r in db.query(
+        "SELECT seat_id FROM reservations WHERE status IN ('booked','checked_in')")}
+    try:
+        from . import devices
+        for sid, occupied in devices.device_occupied_map().items():
+            if occupied:
+                busy.add(sid)
+    except Exception:
+        pass
+    return busy
+
+
 def _free_seats(prefer='', limit=5):
     sql = ("SELECT s.id, s.code, s.zone, s.seat_type, s.features, s.status,"
            "       f.name AS floor_name, f.floor_no"
@@ -237,19 +255,20 @@ def _free_seats(prefer='', limit=5):
     if prefer:
         sql += " AND s.seat_type = ?"
         args.append(prefer)
-    sql += " ORDER BY s.floor_id, s.code LIMIT ?"
-    args.append(int(limit))
-    return [dict(r) for r in db.query(sql, tuple(args))]
+    sql += " ORDER BY s.floor_id, s.code"
+    rows = [dict(r) for r in db.query(sql, tuple(args))]
+    busy = _busy_seat_ids()
+    return [r for r in rows if r['id'] not in busy][:int(limit)]
 
 
 def _free_total(prefer=''):
-    sql = "SELECT COUNT(*) AS n FROM seats WHERE status='free'"
+    sql = "SELECT id FROM seats WHERE status='free'"
     args = []
     if prefer:
         sql += " AND seat_type = ?"
         args.append(prefer)
-    row = db.one(sql, tuple(args))
-    return int(row['n']) if row else 0
+    busy = _busy_seat_ids()
+    return len([r for r in db.query(sql, tuple(args)) if r['id'] not in busy])
 
 
 def _seat_by_code(code):
@@ -381,6 +400,17 @@ def _intent_book_seat(text, user_id, session_id):
     if seat is not None and seat['status'] != 'free':
         reply = ('%s 号座位现在不可约（%s）。要不要我换一个同区域的空位？'
                  % (seat['code'], '维护中' if seat['status'] == 'maintenance' else seat['status']))
+        return {
+            'reply': reply,
+            'slots': {'seat_code': seat['code']},
+            'data': {'seat': dict(seat), 'draft': None, 'rule': {'max_active': config.MAX_ACTIVE_RESERVATIONS}},
+            'suggestions': ['有没有别的空位', '换个座位'],
+            'tool_calls': calls,
+        }
+
+    if seat is not None and seat['id'] in _busy_seat_ids():
+        reply = ('%s 号座位现在已被预约或正在使用。要不要我换一个同区域的空位？'
+                 % seat['code'])
         return {
             'reply': reply,
             'slots': {'seat_code': seat['code']},

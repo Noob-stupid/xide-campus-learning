@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""轻量工作流引擎：节点顺序执行 + 运行轨迹落库。
+"""轻量工作流引擎（运行时）：app.py、seats、relay 使用本模块。
 
-与 AgentArts 概念对齐：flow / node / run / step / context。
-先跑通串行节点；分支由节点函数返回 next 或 status 控制。
+另有 ``services/workflow.py`` 是契约版 / 对端 A 的独立实现（节点定义更完整，测试用）。
+两者接口相近但运行时不要混用；新增业务流程请扩展本文件，避免两套引擎同时漂移。
 """
 import traceback
 
