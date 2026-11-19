@@ -1,0 +1,37 @@
+/* 登录页专用：深色品牌区 + 浅色表单区，清白科技感。其他页面不受影响。 */
+.page-login .login-wrap{background:#f6f8fb}
+.page-login .login-art{
+  background:#0f172a;color:#f8fafc;padding:56px;
+}
+.page-login .login-art::after{display:none}
+.page-login .login-art .brand{padding:0;border:none}
+.page-login .login-art h1{
+  color:#fff;font-family:var(--display);font-weight:650;
+  font-size:48px;line-height:1.12;letter-spacing:-.035em;
+}
+.page-login .login-art p{color:#cbd5e1;max-width:470px}
+.page-login .login-art .quote{border-left-color:#5eead4;color:#cbd5e1}
+.page-login .login-form-side{background:#f6f8fb}
+.page-login .login-card h2{font-family:var(--display);font-weight:650;letter-spacing:-.025em}
+.page-login .login-card .sub{color:#64748b}
+.page-login .login-card .input{
+  border-color:#e2e8f0;border-radius:9px;background:#fff;
+}
+.page-login .login-card .input:focus{
+  border-color:#0f766e;box-shadow:0 0 0 3px rgba(15,118,110,.10);
+}
+.page-login .login-card .btn.primary{
+  background:#0f766e;color:#fff;border-radius:9px;box-shadow:none;
+}
+.page-login .login-card .btn.primary:hover{background:#115e59}
+.page-login .demo-user{
+  background:#fff;border-color:#e2e8f0;border-radius:9px;
+}
+.page-login .demo-user:hover{border-color:#cbd5e1;background:#f8fafc;box-shadow:none}
+.page-login .demo-user b{color:#0f172a}
+.page-login .demo-user small{color:#64748b}
+.page-login .login-foot{color:#94a3b8}
+@media (max-width:900px){
+  .page-login .login-art{padding:34px 24px}
+  .page-login .login-art h1{font-size:36px}
+}
