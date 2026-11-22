@@ -1488,6 +1488,9 @@ def api_sensor_report():
         return _sensor_envelope(None, '设备鉴权失败', 401)
     d = request.get_json(silent=True) or {}
     try:
+        if 'distance_cm' in d:
+            return _sensor_envelope(devices.ultrasonic_report(
+                d.get('device_id'), d.get('seat_id'), d.get('distance_cm'), d.get('threshold_cm', 50)))
         if 'ir_front' in d or 'ir_back' in d:
             return _sensor_envelope(devices.protocol_report(
                 d.get('device_id'), d.get('seat_id'), d.get('ir_front', 0), d.get('ir_back', 0)))

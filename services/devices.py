@@ -165,3 +165,35 @@ def protocol_report(device_id, seat_id=None, ir_front=0, ir_back=0):
         report(device_id, None, occupied)
     status = 'occupied' if occupied else ('free' if empty >= 2 else 'pending_release')
     return {'seat_id': int(seat_id), 'status': status, 'consecutive_empty': empty}
+
+
+def ultrasonic_report(device_id, seat_id=None, distance_cm=0, threshold_cm=50):
+    """超声波上报：距离小于阈值且大于 0 视为有人；连续 2 次无人释放。"""
+    ensure_tables()
+    dev = db.one('SELECT * FROM devices WHERE device_id=?', (device_id,))
+    if not dev:
+        if seat_id is None:
+            raise ValueError('设备未注册')
+        seat = db.one('SELECT * FROM seats WHERE id=?', (int(seat_id),))
+        if not seat:
+            raise ValueError('座位不存在')
+        db.execute('INSERT INTO devices(device_id,seat_id,sensor_type,last_seen,online,config) VALUES(?,?,?,?,1,?)',
+                   (device_id, int(seat_id), 'ultrasonic', db.now(), ''))
+        dev = db.one('SELECT * FROM devices WHERE device_id=?', (device_id,))
+    seat_id = dev['seat_id'] or (int(seat_id) if seat_id is not None else None)
+    if not seat_id:
+        raise ValueError('设备未绑定座位')
+    try:
+        distance = float(distance_cm or 0)
+    except Exception:
+        distance = 0.0
+    threshold = float(threshold_cm or 50)
+    occupied = 0 < distance <= threshold
+    key = 'sensor_empty_%s' % seat_id
+    empty = 0 if occupied else int(db.get_setting(key, '0') or 0) + 1
+    db.set_setting(key, str(empty))
+    if occupied or empty >= 2:
+        report(device_id, None, occupied)
+    status = 'occupied' if occupied else ('free' if empty >= 2 else 'pending_release')
+    return {'seat_id': int(seat_id), 'status': status, 'consecutive_empty': empty,
+            'distance_cm': round(distance, 1), 'threshold_cm': threshold}

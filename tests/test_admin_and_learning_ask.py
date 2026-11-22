@@ -67,3 +67,13 @@ def test_sensor_protocol_releases_after_two_empty_reports(client):
     assert pending['status'] == 'pending_release'
     free = devices.protocol_report('dev-test', 1, 0, 0)
     assert free['status'] == 'free'
+
+
+def test_ultrasonic_report_maps_distance_to_occupancy(client):
+    _, _, _ = client
+    near = devices.ultrasonic_report('US-TEST', 1, 35, 50)
+    assert near['status'] == 'occupied'
+    pending = devices.ultrasonic_report('US-TEST', 1, 120, 50)
+    assert pending['status'] == 'pending_release'
+    free = devices.ultrasonic_report('US-TEST', 1, 120, 50)
+    assert free['status'] == 'free'

@@ -20,3 +20,5 @@ codearts-agent.yaml
 codearts-agent-sessions/
 
 hardware/esp32_seat_sensor/secrets.h
+
+hardware/esp32_ultrasonic_sensor/secrets.h

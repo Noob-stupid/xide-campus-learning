@@ -47,3 +47,24 @@ curl -X POST http://127.0.0.1:5820/api/sensor/device/register \
 - 仓库提供固件源码和协议，不包含真实板子/烧录结果；
 - 真实设备需按现场 Wi-Fi 和服务器地址修改 `secrets.h`；
 - AppGallery 上架与硬件接入是两件独立的事。
+
+## 超声波方案（主方案）
+
+代码：`hardware/esp32_ultrasonic_sensor/esp32_ultrasonic_sensor.ino`
+
+| HC-SR04 | ESP32 |
+|---|---|
+| VCC | 5V |
+| GND | GND |
+| TRIG | GPIO5 |
+| ECHO | GPIO18（必须 1k/2k 分压到 3.3V） |
+
+固件每 3 秒测距，上报：
+
+```json
+{"device_id":"US:AA:BB:CC:11:22","seat_id":1,"distance_cm":35.0,"threshold_cm":50.0}
+```
+
+服务端 `distance_cm > 0 && <= threshold_cm` 判定有人；连续两次无人后释放。
+
+> ECHO 是 5V 输出，不能直接进 ESP32；先断电接好分压再上电。
