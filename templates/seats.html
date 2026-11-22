@@ -112,11 +112,13 @@
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       g.setAttribute('class', 'seat ' + statusClass(s) + (s.mine ? ' mine' : '') + (selected && selected.id === s.id ? ' selected' : ''));
       g.dataset.id = s.id;
+      const sw = Math.max(8, Number(s.w) || 30), sh = Math.max(7, Number(s.h) || 24);
       const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      r.setAttribute('x', s.x - 15); r.setAttribute('y', s.y - 12);
-      r.setAttribute('width', 30); r.setAttribute('height', 24); r.setAttribute('rx', 5);
+      r.setAttribute('x', Number(s.x) - sw / 2); r.setAttribute('y', Number(s.y) - sh / 2);
+      r.setAttribute('width', sw); r.setAttribute('height', sh); r.setAttribute('rx', 3);
       const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      t.setAttribute('x', s.x); t.setAttribute('y', s.y + 3);
+      t.setAttribute('x', s.x); t.setAttribute('y', Number(s.y) + 3);
+      t.setAttribute('font-size', sw < 20 ? '6' : '8');
       t.textContent = s.code;
       g.appendChild(r); g.appendChild(t);
       if (filter !== 'all' && !(s.features || []).includes(filter)) g.style.opacity = '.18';

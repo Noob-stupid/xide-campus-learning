@@ -57,6 +57,9 @@
         </span>
       </div>
 
+        <button class="btn ghost sm" id="selectAllSeats" type="button">全选座位</button>
+      </div>
+
       <div class="edit-canvas" id="editCanvas">
         <svg id="editSvg" viewBox="0 0 960 620" preserveAspectRatio="xMidYMid meet">
           <g id="viewport">
@@ -75,9 +78,10 @@
       <div class="edit-inspector" id="editInspector" style="display:none"></div>
 
       <div class="edit-actions">
-        <form id="mapForm" class="row" style="gap:8px;align-items:center">
-          <input class="input" type="file" id="mapFile" accept="image/png,image/jpeg,image/webp" required>
-          <button class="btn primary sm" type="submit">上传底图</button>
+        <form id="mapForm" class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
+          <label class="small">底图<input class="input" type="file" id="mapFile" accept="image/png,image/jpeg,image/webp" required></label>
+          <label class="small">DXF（可选，推荐）<input class="input" type="file" id="mapDxfFile" accept=".dxf"></label>
+          <button class="btn primary sm" type="submit">上传并生成路网</button>
         </form>
         <button class="btn ghost sm" id="mapDelete" type="button" style="display:none">删除底图</button>
       </div>
@@ -317,11 +321,13 @@
       el.setAttribute('class', seatClass(s));
       el.dataset.kind = 'seat';
       el.dataset.id = s.id;
+      const sw = Math.max(8, Number(s.w) || 30), sh = Math.max(7, Number(s.h) || 24);
       const r = document.createElementNS(SVGNS, 'rect');
-      r.setAttribute('x', s.x - 15); r.setAttribute('y', s.y - 12);
-      r.setAttribute('width', 30); r.setAttribute('height', 24); r.setAttribute('rx', 5);
+      r.setAttribute('x', Number(s.x) - sw / 2); r.setAttribute('y', Number(s.y) - sh / 2);
+      r.setAttribute('width', sw); r.setAttribute('height', sh); r.setAttribute('rx', 3);
       const t = document.createElementNS(SVGNS, 'text');
       t.setAttribute('x', s.x); t.setAttribute('y', Number(s.y) + 3);
+      t.setAttribute('font-size', sw < 20 ? '6' : '8');
       t.textContent = s.code;
       el.appendChild(r); el.appendChild(t);
       g.appendChild(el);
@@ -361,6 +367,7 @@
       el.appendChild(c);
       const t = document.createElementNS(SVGNS, 'text');
       t.setAttribute('x', Number(n.x)); t.setAttribute('y', Number(n.y) - 10);
+      if (nodes.length > 160) t.style.display = 'none';
       t.textContent = n.code;
       el.appendChild(t);
       g.appendChild(el);
@@ -784,6 +791,18 @@
     drawAll(); renderInspector(); renderStat();
   });
 
+  $('selectAllSeats').addEventListener('click', () => {
+    if (!active) return ZX.toast('先选楼层', 'err');
+    if (layer !== 'seat') {
+      layer = 'seat';
+      document.querySelectorAll('#layerTabs .chip').forEach(b => b.classList.toggle('active', b.dataset.layer === 'seat'));
+      drawAll();
+    }
+    selSeats = new Set(seats.map(s => s.id));
+    drawSeats(); renderInspector();
+    ZX.toast('已选中 ' + selSeats.size + ' 个座位，可在右侧批量删除');
+  });
+
   $('modeTabs').addEventListener('click', ev => {
     const b = ev.target.closest('button[data-mode]');
     if (!b) return;
@@ -846,22 +865,37 @@
     if (active) await selectFloor(active.id);
   }
 
-  $('mapForm').addEventListener('submit', async e => {
+    $('mapForm').addEventListener('submit', async e => {
     e.preventDefault();
     if (!active) return ZX.toast('先选楼层', 'err');
     const file = $('mapFile').files[0];
-    if (!file) return ZX.toast('先选图片', 'err');
+    if (!file) return ZX.toast('先选底图', 'err');
     const fd = new FormData(); fd.append('file', file);
     const res = await fetch('/api/admin/floors/' + active.id + '/plan', { method: 'POST', body: fd });
     const data = await res.json().catch(() => ({}));
-    if (!data.ok) return ZX.toast(data.error || '上传失败', 'err');
-    ZX.toast('底图已保存');
-    $('mapFile').value = '';
+    if (!data.ok) return ZX.toast(data.error || '上传底图失败', 'err');
+    const dxf = $('mapDxfFile').files[0];
+    let stats = null;
+    if (dxf) {
+      const dfd = new FormData();
+      dfd.append('file', dxf);
+      dfd.append('apply_seats', '1');
+      ZX.toast('底图已上传，正在解析 DXF…');
+      const dr = await fetch('/api/admin/floors/' + active.id + '/network/from-dxf', { method: 'POST', body: dfd });
+      const dd = await dr.json().catch(() => ({}));
+      if (!dd.ok) return ZX.toast(dd.error || 'DXF 生成失败', 'err');
+      stats = dd.stats;
+      ZX.toast('DXF：节点 ' + dd.nodes + ' / 连线 ' + dd.edges + ' / 座位 ' + dd.seats);
+    } else {
+      ZX.toast('底图已保存；未上传 DXF');
+    }
+    $('mapFile').value = ''; $('mapDxfFile').value = '';
     const keep = active.id;
     await loadFloors(); await selectFloor(keep);
+    if (stats) { await loadNetwork(); drawAll(); renderStat(stats); }
   });
 
-  $('mapDelete').addEventListener('click', async () => {
+$('mapDelete').addEventListener('click', async () => {
     if (!active || !confirm('删除这一层的底图？座位和路网不会删。')) return;
     try {
       await api('/api/admin/floors/' + active.id + '/plan', { method: 'DELETE' });

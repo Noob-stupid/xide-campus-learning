@@ -480,9 +480,15 @@ def api_admin_floor_delete(fid):
     floor = db.one('SELECT * FROM floors WHERE id=?', (fid,))
     if not floor:
         return jsonify({'ok': False, 'error': '楼层不存在'}), 404
-    seats = db.one('SELECT COUNT(*) AS c FROM seats WHERE floor_id=?', (fid,))['c']
-    if seats:
-        return jsonify({'ok': False, 'error': '这层还有 %d 个座位，先清空再删' % seats}), 400
+    seat_rows = db.query('SELECT id FROM seats WHERE floor_id=?', (fid,))
+    seat_ids = [int(r['id']) for r in seat_rows]
+    if seat_ids:
+        marks = ','.join('?' for _ in seat_ids)
+        db.execute('DELETE FROM reservations WHERE seat_id IN (%s)' % marks, tuple(seat_ids))
+        db.execute('DELETE FROM study_sessions WHERE seat_id IN (%s)' % marks, tuple(seat_ids))
+        db.execute('DELETE FROM seat_events WHERE seat_id IN (%s)' % marks, tuple(seat_ids))
+        db.execute('DELETE FROM devices WHERE seat_id IN (%s)' % marks, tuple(seat_ids))
+        db.execute('DELETE FROM seats WHERE floor_id=?', (fid,))
     plan = dict(floor).get('plan_path') or ''
     db.execute('DELETE FROM nav_edges WHERE floor_id=?', (fid,))
     db.execute('DELETE FROM nav_nodes WHERE floor_id=?', (fid,))
@@ -729,7 +735,7 @@ def api_admin_network_from_dxf(fid):
                 continue
             db.execute('INSERT INTO seats(floor_id,code,zone,x,y,w,h,seat_type,features,status) '
                        'VALUES(?,?,?,?,?,?,?,?,?,?)',
-                       (fid, code, 'CAD', cand['x'], cand['y'], 30, 24, 'normal', '', 'free'))
+                       (fid, code, 'CAD', cand['x'], cand['y'], cand.get('w', 16), cand.get('h', 12), 'normal', '', 'free'))
             existing.add(code)
             created += 1
 

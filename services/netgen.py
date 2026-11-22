@@ -460,7 +460,8 @@ def from_dxf(raw_bytes, cell=36.0, size=(CANVAS_W, CANVAS_H)):
         seat_seen.add(code)
         seats.append({'code': code,
                       'x': max(0, min(W - 1, round(float(s.get('x', 0)), 1))),
-                      'y': max(0, min(H - 1, round(float(s.get('y', 0)), 1)))})
+                      'y': max(0, min(H - 1, round(float(s.get('y', 0)), 1))),
+                      'w': 16, 'h': 12})
     rooms = []
     for r in out.get('rooms') or []:
         rooms.append({'name': str(r.get('name') or '')[:24],
