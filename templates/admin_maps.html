@@ -840,7 +840,8 @@
   async function loadFloors() {
     const r = await api('/api/floors');
     floors = r.floors || [];
-    if (!active && floors.length) active = floors[0];
+    const wanted = Number(new URLSearchParams(location.search).get("floor_id") || 0);
+    if (!active && floors.length) active = floors.find(f => f.id === wanted) || floors[0];
     renderList();
     if (active) await selectFloor(active.id);
   }

@@ -1,12 +1,12 @@
-# 本地演示依赖
+﻿# 鏈湴婕旂ず渚濊禆
 Flask>=3.0
 opencv-python>=4.9
 numpy>=1.26
-Pillow>=10.0
+Pillow>=10.0`nezdxf>=1.1
 pytest>=8.0
 
-# 云上部署（按需）
-# gunicorn>=21.0
+# 浜戜笂閮ㄧ讲锛堟寜闇€锛?# gunicorn>=21.0
 # PyMySQL>=1.1
 # redis>=5.0
 # obs-sdk>=3.23
+

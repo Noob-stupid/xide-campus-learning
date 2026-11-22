@@ -326,7 +326,7 @@ def _seg(mask, a, b, thick=3):
             y0 += sy
 
 
-def from_dxf(raw_bytes, cell=36.0, size=(CANVAS_W, CANVAS_H)):
+def _from_dxf_simple(raw_bytes, cell=36.0, size=(CANVAS_W, CANVAS_H)):
     """DXF -> (路网, 座位候选, 房间名, 统计)。"""
     W, H = int(size[0]), int(size[1])
     text = None
@@ -402,3 +402,70 @@ def from_dxf(raw_bytes, cell=36.0, size=(CANVAS_W, CANVAS_H)):
         'walls': len(walls), 'furniture': len(furns), 'labels': len(labels),
         'scale': round(scale, 4),
     }
+
+def from_dxf(raw_bytes, cell=36.0, size=(CANVAS_W, CANVAS_H)):
+    """DXF -> (nodes, edges, seats, rooms, meta)。
+
+    使用从 MAX_xiangmu 验证过的 DxfRoadNetworkBuilder：
+    - 按图层名识别 wall / furniture / text / door / stair
+    - 处理 DXF 单位、墙主体包围盒、整幅图坐标对齐
+    - 只把 300~900mm 的闭合家具块作为座位候选
+    - 用骨架生成路网并补连孤立点
+    """
+    import os
+    import tempfile
+    from services.dxf_reader import DxfRoadNetworkBuilder
+
+    fd, tmp = tempfile.mkstemp(suffix='.dxf')
+    try:
+        with os.fdopen(fd, 'wb') as fh:
+            fh.write(raw_bytes)
+        out = DxfRoadNetworkBuilder().build(tmp, target_size=size)
+    finally:
+        try:
+            os.remove(tmp)
+        except Exception:
+            pass
+    if not out.get('ok'):
+        raise ValueError(out.get('error') or 'DXF 解析失败')
+    W, H = int(size[0]), int(size[1])
+    raw_nodes = (out.get('network') or {}).get('nodes') or {}
+    raw_edges = (out.get('network') or {}).get('edges') or []
+    if not raw_nodes:
+        raise ValueError('DXF 没有生成可用路网节点')
+    # 统一编号，保留 x/y
+    ordered = sorted(raw_nodes.items(), key=lambda kv: (float(kv[1].get('y', 0)), float(kv[1].get('x', 0))))
+    remap, nodes = {}, []
+    for i, (old, n) in enumerate(ordered, start=1):
+        code = 'N%03d' % i
+        remap[old] = code
+        x = max(0, min(W - 1, round(float(n.get('x', 0)), 1)))
+        y = max(0, min(H - 1, round(float(n.get('y', 0)), 1)))
+        nodes.append((code, x, y, 'corridor'))
+    edges, seen = [], set()
+    for e in raw_edges:
+        a = remap.get(e.get('from'))
+        b = remap.get(e.get('to'))
+        if not a or not b or a == b:
+            continue
+        key = tuple(sorted((a, b)))
+        if key not in seen:
+            seen.add(key)
+            edges.append(key)
+    seats, seat_seen = [], set()
+    for i, s in enumerate(out.get('seats') or [], start=1):
+        code = str(s.get('seat_label') or s.get('code') or ('SEAT-%03d' % i))[:24]
+        if code in seat_seen:
+            code = '%s-%02d' % (code[:20], i)
+        seat_seen.add(code)
+        seats.append({'code': code,
+                      'x': max(0, min(W - 1, round(float(s.get('x', 0)), 1))),
+                      'y': max(0, min(H - 1, round(float(s.get('y', 0)), 1)))})
+    rooms = []
+    for r in out.get('rooms') or []:
+        rooms.append({'name': str(r.get('name') or '')[:24],
+                      'code': str(r.get('code') or ''),
+                      'x': r.get('x', 0), 'y': r.get('y', 0)})
+    meta = dict(out.get('stats') or {})
+    meta['warnings'] = (out.get('warnings') or [])[:8]
+    return nodes, edges, seats, rooms, meta
