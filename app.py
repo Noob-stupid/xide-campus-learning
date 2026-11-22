@@ -932,7 +932,12 @@ def api_nav():
     r = navigation.plan_path(s['floor_id'], start, 's_%s' % s['code'])
     r['seat'] = s
     fl = db.one('SELECT * FROM floors WHERE id=?', (s['floor_id'],))
-    r['floor'] = dict(fl) if fl else None
+    if fl:
+        fd = dict(fl)
+        fd['plan_url'] = media_url(fd.get('plan_path'))
+        r['floor'] = fd
+    else:
+        r['floor'] = None
     return jsonify(r)
 
 

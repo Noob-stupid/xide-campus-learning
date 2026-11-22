@@ -17,6 +17,7 @@
     </div>
     <svg class="seat-svg" id="navSvg" viewBox="0 0 960 620">
       <rect class="wall" x="20" y="20" width="920" height="580" rx="18"></rect>
+      <image id="navPlanImage" x="0" y="0" width="960" height="620" preserveAspectRatio="none" style="display:none"></image>
       <path class="corridor" d="M56 335 H904 M480 335 V598"></path>
       <g id="navZoneLabels"></g>
       <circle class="entry" cx="480" cy="598" r="13"></circle>
@@ -56,29 +57,41 @@
 
 
   /* 画布尺寸跟随楼层：底图可能是竖图，viewBox 和墙体装饰都要按实际画布来 */
-  function applyCanvas(cw, ch) {
+  function applyCanvas(cw, ch, planUrl) {
     cw = Number(cw) || 960; ch = Number(ch) || 620;
     const svg = document.getElementById('navSvg');
     if (!svg) return;
     svg.setAttribute('viewBox', '0 0 ' + cw + ' ' + ch);
     const wall = svg.querySelector('.wall');
+    const corr = svg.querySelector('.corridor');
+    const entry = svg.querySelector('.entry');
+    const entryText = svg.querySelector('.entry-text');
+    const plan = svg.querySelector('#navPlanImage');
     if (wall) {
       wall.setAttribute('x', 20); wall.setAttribute('y', 20);
       wall.setAttribute('width', cw - 40); wall.setAttribute('height', ch - 40);
     }
-    const corr = svg.querySelector('.corridor');
     if (corr) {
       corr.setAttribute('d', 'M56 ' + (ch / 2) + ' H' + (cw - 56) +
         ' M' + (cw / 2) + ' ' + (ch / 2) + ' V' + (ch - 22));
     }
-    const entry = svg.querySelector('.entry');
     if (entry) { entry.setAttribute('cx', cw / 2); entry.setAttribute('cy', ch - 22); }
-    const et = svg.querySelector('.entry-text');
-    if (et) { et.setAttribute('x', cw / 2); et.setAttribute('y', ch - 18); }
-    const plan = svg.querySelector('#floorPlanImage');
-    if (plan) {
-      plan.setAttribute('x', 20); plan.setAttribute('y', 20);
-      plan.setAttribute('width', cw - 40); plan.setAttribute('height', ch - 40);
+    if (entryText) { entryText.setAttribute('x', cw / 2); entryText.setAttribute('y', ch - 18); }
+    if (plan && planUrl) {
+      plan.setAttribute('href', planUrl);
+      plan.setAttribute('x', 0); plan.setAttribute('y', 0);
+      plan.setAttribute('width', cw); plan.setAttribute('height', ch);
+      plan.style.display = '';
+      if (wall) wall.style.display = 'none';
+      if (corr) corr.style.display = 'none';
+      if (entry) entry.style.display = 'none';
+      if (entryText) entryText.style.display = 'none';
+    } else if (plan) {
+      plan.style.display = 'none';
+      if (wall) wall.style.display = '';
+      if (corr) corr.style.display = '';
+      if (entry) entry.style.display = '';
+      if (entryText) entryText.style.display = '';
     }
   }
 
@@ -130,7 +143,7 @@
       }
       if (!seatId) { document.getElementById('navHint').textContent = '还没有预约，先去空间选一个座位。'; return; }
       const nav = await ZX.api('/api/nav?seat_id=' + seatId + '&from=' + encodeURIComponent(startCode));
-    if (nav.floor) { applyCanvas(nav.floor.canvas_w, nav.floor.canvas_h); loadStartNodes(nav.floor.id); }
+    if (nav.floor) { applyCanvas(nav.floor.canvas_w, nav.floor.canvas_h, nav.floor.plan_url); loadStartNodes(nav.floor.id); }
       if (!nav.ok) { document.getElementById('navHint').textContent = nav.error || '路径规划失败'; return; }
       seat = nav.seat;
       const seatsRes = await ZX.api('/api/seats?floor_id=' + seat.floor_id);
