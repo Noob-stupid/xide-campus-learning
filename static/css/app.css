@@ -499,23 +499,23 @@ img.avatar{object-fit:cover;display:inline-block;border-radius:50%}
 
 /* 座位 */
 .edit-canvas .seat{cursor:grab}
-.edit-canvas .seat rect{stroke:#cdd7e4;stroke-width:1;rx:5}
+.edit-canvas .seat rect{stroke:#cbd5e1;stroke-width:.8;rx:2}
 .edit-canvas .seat text{font-size:8px;fill:#41536b;text-anchor:middle;pointer-events:none}
-.edit-canvas .seat.free rect{fill:#e8f5f2}
-.edit-canvas .seat.booked rect{fill:#f8e4c4;stroke:#d9b47a}
-.edit-canvas .seat.using rect{fill:#f3c7c2;stroke:#d49a93}
-.edit-canvas .seat.occupied rect{fill:#f6d9d6;stroke:#d8a39d}
+.edit-canvas .seat.free rect{fill:#fff;stroke:#94a3b8}
+.edit-canvas .seat.booked rect{fill:#fff7ed;stroke:#d97706}
+.edit-canvas .seat.using rect{fill:#fef2f2;stroke:#ef4444}
+.edit-canvas .seat.occupied rect{fill:#fef2f2;stroke:#ef4444}
 .edit-canvas .seat.maintenance rect{fill:#e5e8ee;stroke:#b9c1cd}
 .edit-canvas .seat.mine rect{stroke:var(--amber);stroke-width:2.4}
 .edit-canvas .seat.selected rect{fill:#fff;stroke:var(--amber);stroke-width:2.4}
 .edit-canvas .seat.selected text{fill:#2b3a4a;font-weight:600}
 
 /* 路网 */
-#layerNet .net-edge{stroke:#0f766e;stroke-width:1.4;stroke-opacity:.5;stroke-linecap:round}
-#layerNet .net-node circle{fill:#fff;stroke:#0f766e;stroke-width:1.8;cursor:grab}
-#layerNet .net-node text{font-size:7.5px;fill:#5b6673;text-anchor:middle;pointer-events:none}
-#layerNet .net-node.selected circle{fill:#0f766e;stroke:#0b5f59}
-#layerNet .net-node.selected text{fill:#0f766e;font-weight:600}
+#layerNet .net-edge{stroke:#2f80ed;stroke-width:1.2;stroke-opacity:.55;stroke-dasharray:4 4;stroke-linecap:round}
+#layerNet .net-node circle{fill:#2f80ed;stroke:#fff;stroke-width:1.2;cursor:grab}
+#layerNet .net-node text{font-size:7px;fill:#64748b;text-anchor:middle;pointer-events:none}
+#layerNet .net-node.selected circle{fill:#f59e0b;stroke:#b45309;stroke-width:2}
+#layerNet .net-node.selected text{fill:#b45309;font-weight:600}
 #layerNet .net-node.pending circle{fill:#fff2d6;stroke:#a35b00;stroke-width:2.2}
 #layerNet .net-entry circle{fill:#2b3a4a;stroke:#fff;stroke-width:2}
 #layerNet .net-entry text{font-size:7.5px;fill:#2b3a4a;text-anchor:middle;pointer-events:none}

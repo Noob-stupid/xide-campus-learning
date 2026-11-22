@@ -119,6 +119,7 @@
       const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       t.setAttribute('x', s.x); t.setAttribute('y', Number(s.y) + 3);
       t.setAttribute('font-size', sw < 20 ? '6' : '8');
+      if (sw < 20) t.style.display = 'none';
       t.textContent = s.code;
       g.appendChild(r); g.appendChild(t);
       if (filter !== 'all' && !(s.features || []).includes(filter)) g.style.opacity = '.18';
@@ -170,7 +171,7 @@
     cw = Number(cw) || 960; ch = Number(ch) || 620;
     const svg = document.getElementById('seatSvg');
     if (!svg) return;
-    svg.setAttribute('viewBox', '0 0 ' + cw + ' ' + ch);
+    svg.setAttribute('viewBox', '-24 -24 ' + (cw + 48) + ' ' + (ch + 48));
     const wall = svg.querySelector('.wall');
     if (wall) {
       wall.setAttribute('x', 20); wall.setAttribute('y', 20);

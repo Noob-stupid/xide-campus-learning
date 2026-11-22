@@ -257,7 +257,7 @@
     CW = Math.round(Number(active.canvas_w || 960));
     CH = Math.round(Number(active.canvas_h || 620));
     const svg = svgEl();
-    svg.setAttribute('viewBox', '0 0 ' + CW + ' ' + CH);
+    svg.setAttribute('viewBox', '-32 -32 ' + (CW + 64) + ' ' + (CH + 64));
     const bg = svg.querySelector('#viewport > rect');
     if (bg) { bg.setAttribute('width', CW); bg.setAttribute('height', CH); }
     const img = $('editPlan');
@@ -328,6 +328,7 @@
       const t = document.createElementNS(SVGNS, 'text');
       t.setAttribute('x', s.x); t.setAttribute('y', Number(s.y) + 3);
       t.setAttribute('font-size', sw < 20 ? '6' : '8');
+      if (sw < 20) t.style.display = 'none';
       t.textContent = s.code;
       el.appendChild(r); el.appendChild(t);
       g.appendChild(el);
@@ -363,11 +364,11 @@
       el.dataset.code = n.code;
       const c = document.createElementNS(SVGNS, 'circle');
       c.setAttribute('cx', n.x); c.setAttribute('cy', n.y);
-      c.setAttribute('r', n.kind === 'entry' ? 8 : 5.5);
+      c.setAttribute('r', n.kind === 'entry' ? 6 : 4);
       el.appendChild(c);
       const t = document.createElementNS(SVGNS, 'text');
       t.setAttribute('x', Number(n.x)); t.setAttribute('y', Number(n.y) - 10);
-      if (nodes.length > 160) t.style.display = 'none';
+      if (nodes.length > 80) t.style.display = 'none';
       t.textContent = n.code;
       el.appendChild(t);
       g.appendChild(el);
@@ -860,6 +861,11 @@
     const r = await api('/api/floors');
     floors = r.floors || [];
     const wanted = Number(new URLSearchParams(location.search).get("floor_id") || 0);
+    const wantedLayer = new URLSearchParams(location.search).get("layer");
+    if (wantedLayer === "net") {
+      layer = "net";
+      document.querySelectorAll("#layerTabs .chip").forEach(b => b.classList.toggle("active", b.dataset.layer === "net"));
+    }
     if (!active && floors.length) active = floors.find(f => f.id === wanted) || floors[0];
     renderList();
     if (active) await selectFloor(active.id);
