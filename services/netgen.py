@@ -565,6 +565,11 @@ def from_dxf(raw_bytes, cell=36.0, size=(CANVAS_W, CANVAS_H)):
     raw_nodes, raw_edges = len(nodes), len(edges)
     nodes, edges = _connect_components(nodes, edges)
     nodes, edges = _simplify_network(nodes, edges)
+    # 自动选一个默认入口：最靠下、靠近画布中线的节点
+    if nodes and not any(n[3] == 'entry' for n in nodes):
+        idx = min(range(len(nodes)), key=lambda i: abs(nodes[i][1] - W / 2) + abs(nodes[i][2] - H) * 0.2)
+        _c, _x, _y, _k = nodes[idx]
+        nodes[idx] = (_c, _x, _y, 'entry')
     meta['raw_nodes'] = raw_nodes
     meta['raw_edges'] = raw_edges
     meta['simplified_nodes'] = len(nodes)

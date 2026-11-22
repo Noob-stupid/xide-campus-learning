@@ -9,6 +9,9 @@
     <div class="floor-toolbar">
       <span class="badge blue">A* 室内路网</span>
       <span class="small muted" id="navHint">正在规划路径…</span>
+      <label class="small" style="display:inline-flex;align-items:center;gap:6px;margin-left:10px">起点
+        <select class="input" id="startNode" style="width:auto;max-width:180px"><option value="entry">默认入口</option></select>
+      </label>
       <a class="btn soft sm" href="/outdoor" style="margin-left:auto">室外导航</a>
       <a class="btn ghost sm" href="/seats">返回空间</a>
     </div>
@@ -48,6 +51,7 @@
 <script>
   const qs = new URLSearchParams(location.search);
   let seatId = Number(qs.get('seat_id') || 0);
+  let startCode = qs.get('from') || localStorage.getItem('xide_start_' + (qs.get('seat_id') || '')) || 'entry';
   let currentSession = null, reservation = null, seat = null;
 
 
@@ -101,6 +105,18 @@
     document.getElementById('navNodes').innerHTML = path.map((p, i) =>
       '<circle cx="' + p.x + '" cy="' + p.y + '" r="' + (i === path.length - 1 ? 9 : 5) + '" fill="' + (i === path.length - 1 ? '#0f2a4a' : '#ffffff') + '" stroke="#c98a2e" stroke-width="2"></circle>').join('');
   }
+  async function loadStartNodes(fid) {
+    try {
+      const r = await ZX.api('/api/nav/nodes?floor_id=' + fid);
+      const sel = document.getElementById('startNode');
+      if (!sel) return;
+      const nodes = r.nodes || [];
+      sel.innerHTML = '<option value="entry">默认入口</option>' + nodes.map(n =>
+        '<option value="' + ZX.escapeHtml(n.code) + '">' + (n.kind === 'entry' ? '入口 · ' : '节点 · ') + ZX.escapeHtml(n.code) + '</option>').join('');
+      if (nodes.some(n => n.code === startCode)) sel.value = startCode;
+    } catch (e) {}
+  }
+
   async function load() {
     try {
       if (!seatId) {
@@ -113,8 +129,8 @@
         }
       }
       if (!seatId) { document.getElementById('navHint').textContent = '还没有预约，先去空间选一个座位。'; return; }
-      const nav = await ZX.api('/api/nav?seat_id=' + seatId + '&from=entry');
-    if (nav.floor) applyCanvas(nav.floor.canvas_w, nav.floor.canvas_h);
+      const nav = await ZX.api('/api/nav?seat_id=' + seatId + '&from=' + encodeURIComponent(startCode));
+    if (nav.floor) { applyCanvas(nav.floor.canvas_w, nav.floor.canvas_h); loadStartNodes(nav.floor.id); }
       if (!nav.ok) { document.getElementById('navHint').textContent = nav.error || '路径规划失败'; return; }
       seat = nav.seat;
       const seatsRes = await ZX.api('/api/seats?floor_id=' + seat.floor_id);
@@ -156,6 +172,11 @@
     try { await ZX.api('/api/bookings/' + currentSession.reservation_id + '/end', { method: 'POST' }); ZX.toast('已结束，正在匹配学习视频'); location.href = '/learn'; }
     catch (e) { ZX.toast(e.message, 'err'); }
   }
+  document.getElementById('startNode').addEventListener('change', ev => {
+    startCode = ev.target.value;
+    localStorage.setItem('xide_start_' + seatId, startCode);
+    load();
+  });
   load();
 </script>
 {% endblock %}

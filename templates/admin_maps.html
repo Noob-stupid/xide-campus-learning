@@ -530,6 +530,7 @@
       [['corridor', '走廊'], ['entry', '入口'], ['junction', '路口'], ['stairs', '楼梯']]
         .map(([v, t]) => '<option value="' + v + '"' + ((n.kind || 'corridor') === v ? ' selected' : '') + '>' + t + '</option>').join('') +
       '</select></label>' +
+      '<button class="btn soft sm" id="insEntry">设为入口</button>' +
       '<span class="small muted">x ' + Math.round(n.x) + ' · y ' + Math.round(n.y) + '</span>' +
       '<button class="btn soft sm" id="insLink">' + (pendingLink === n.code ? '取消连线' : '从这里连线') + '</button>' +
       '<button class="btn ghost sm" id="insDelNode">删除节点</button>';
@@ -538,6 +539,7 @@
       if (r) { await loadNetwork(); drawNet(); renderInspector(); }
     });
     $('insNodeKind').addEventListener('change', e => patchNode(n.id, { kind: e.target.value }));
+    $('insEntry').addEventListener('click', () => patchNode(n.id, { kind: 'entry' }));
     $('insLink').addEventListener('click', () => {
       pendingLink = pendingLink === n.code ? null : n.code;
       drawNet(); renderInspector();

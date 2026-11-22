@@ -25,8 +25,47 @@ def _heuristic(nodes, a, b):
     return math.hypot(na['x'] - nb['x'], na['y'] - nb['y'])
 
 
+def _resolve_start(nodes, start_code):
+    if start_code in nodes:
+        return start_code
+    if start_code in (None, '', 'entry'):
+        for code, n in nodes.items():
+            if n.get('kind') == 'entry':
+                return code
+        if nodes:
+            # 没有显式入口时，取最靠下、最靠中间的点作为默认入口
+            W = max(n['x'] for n in nodes.values()) or 0
+            H = max(n['y'] for n in nodes.values()) or 0
+            return min(nodes, key=lambda c: abs(nodes[c]['x'] - W / 2) + abs(nodes[c]['y'] - H))
+    return start_code
+
+
+def _add_seat_node(floor_id, end_code, nodes, adj):
+    """把 s_<座位号> 动态挂到最近的路网节点上，不把 187 个座位塞进路网。"""
+    if not end_code.startswith('s_'):
+        return end_code
+    seat_code = end_code[2:]
+    seat = db.one('SELECT * FROM seats WHERE code=? AND floor_id=?', (seat_code, floor_id))
+    if not seat:
+        return end_code
+    nearest, best = None, 1e18
+    for code, n in nodes.items():
+        d = (n['x'] - seat['x']) ** 2 + (n['y'] - seat['y']) ** 2
+        if d < best:
+            nearest, best = code, d
+    if not nearest:
+        return end_code
+    nodes[end_code] = {'x': seat['x'], 'y': seat['y'], 'kind': 'seat'}
+    dist = math.sqrt(best)
+    adj[end_code] = [(nearest, dist)]
+    adj[nearest].append((end_code, dist))
+    return end_code
+
+
 def plan_path(floor_id, start_code, end_code):
     nodes, adj = build_graph(floor_id)
+    start_code = _resolve_start(nodes, start_code)
+    end_code = _add_seat_node(floor_id, end_code, nodes, adj)
     if start_code not in nodes or end_code not in nodes:
         return {'ok': False, 'error': '起点或终点不存在', 'path': [], 'steps': []}
     if start_code == end_code:

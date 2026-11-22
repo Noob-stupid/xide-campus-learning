@@ -911,6 +911,16 @@ def api_my_reservations():
     return jsonify({'ok': True, 'reservations': seats.my_reservations(u['id'])})
 
 
+@app.route('/api/nav/nodes')
+@login_required
+def api_nav_nodes():
+    fid = request.args.get('floor_id', type=int) or 0
+    if not fid:
+        return jsonify({'ok': False, 'error': '缺少 floor_id'}), 400
+    rows = db.query('SELECT id,code,x,y,kind FROM nav_nodes WHERE floor_id=? ORDER BY (kind=\'entry\') DESC, code', (fid,))
+    return jsonify({'ok': True, 'nodes': [dict(r) for r in rows]})
+
+
 @app.route('/api/nav')
 @login_required
 def api_nav():
