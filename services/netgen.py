@@ -403,6 +403,99 @@ def _from_dxf_simple(raw_bytes, cell=36.0, size=(CANVAS_W, CANVAS_H)):
         'scale': round(scale, 4),
     }
 
+
+
+def _connect_components(nodes, edges):
+    """把骨架分块用最近的一对节点连起来，保证 A* 能走通。"""
+    pos = {c: (float(x), float(y)) for c, x, y, _k in nodes}
+    adj = {c: set() for c in pos}
+    for a, b in edges:
+        if a in adj and b in adj and a != b:
+            adj[a].add(b); adj[b].add(a)
+    while True:
+        # 找连通分量
+        seen, comps = set(), []
+        for c in adj:
+            if c in seen:
+                continue
+            stack, comp = [c], []
+            seen.add(c)
+            while stack:
+                x = stack.pop(); comp.append(x)
+                for y in adj[x]:
+                    if y not in seen:
+                        seen.add(y); stack.append(y)
+            comps.append(comp)
+        if len(comps) <= 1:
+            break
+        # 最近的一对不同分量节点
+        best = None
+        for i in range(len(comps)):
+            for j in range(i + 1, len(comps)):
+                for a in comps[i]:
+                    ax, ay = pos[a]
+                    for b in comps[j]:
+                        bx, by = pos[b]
+                        d = (ax - bx) ** 2 + (ay - by) ** 2
+                        if best is None or d < best[0]:
+                            best = (d, a, b)
+        if not best:
+            break
+        _d, a, b = best
+        adj[a].add(b); adj[b].add(a)
+    # 重新编号，保持所有节点
+    codes = sorted(adj)
+    remap = {old: 'N%03d' % (i + 1) for i, old in enumerate(codes, 1)}
+    out_nodes = [(remap[c], pos[c][0], pos[c][1], 'corridor') for c in codes]
+    seen_edges, out_edges = set(), []
+    for a in codes:
+        for b in adj[a]:
+            key = tuple(sorted((remap[a], remap[b])))
+            if key not in seen_edges:
+                seen_edges.add(key); out_edges.append(key)
+    return out_nodes, out_edges
+
+def _simplify_network(nodes, edges):
+    """把骨架采样出的连续小段合并成更少的长边。"""
+    pos = {c: (float(x), float(y)) for c, x, y, _k in nodes}
+    adj = {c: set() for c in pos}
+    for a, b in edges:
+        if a in adj and b in adj and a != b:
+            adj[a].add(b); adj[b].add(a)
+    # 合并近似直线的二度节点
+    changed = True
+    while changed:
+        changed = False
+        for c in list(adj):
+            if c not in adj or len(adj[c]) != 2:
+                continue
+            a, b = list(adj[c])
+            ax, ay = pos[a]; bx, by = pos[b]; cx, cy = pos[c]
+            v1x, v1y = cx - ax, cy - ay
+            v2x, v2y = bx - cx, by - cy
+            n1 = (v1x * v1x + v1y * v1y) ** 0.5
+            n2 = (v2x * v2x + v2y * v2y) ** 0.5
+            if n1 < 1e-6 or n2 < 1e-6:
+                continue
+            cos = (v1x * v2x + v1y * v2y) / (n1 * n2)
+            if cos > 0.985:
+                adj[a].discard(c); adj[b].discard(c)
+                adj[a].add(b); adj[b].add(a)
+                adj.pop(c, None); pos.pop(c, None)
+                changed = True
+                break
+    # 重新编号
+    codes = sorted(adj)
+    remap = {old: 'N%03d' % (i + 1) for i, old in enumerate(codes, 1)}
+    out_nodes = [(remap[c], pos[c][0], pos[c][1], 'corridor') for c in codes]
+    seen = set(); out_edges = []
+    for a in codes:
+        for b in adj[a]:
+            key = tuple(sorted((remap[a], remap[b])))
+            if key not in seen:
+                seen.add(key); out_edges.append(key)
+    return out_nodes, out_edges
+
 def from_dxf(raw_bytes, cell=36.0, size=(CANVAS_W, CANVAS_H)):
     """DXF -> (nodes, edges, seats, rooms, meta)。
 
@@ -469,4 +562,11 @@ def from_dxf(raw_bytes, cell=36.0, size=(CANVAS_W, CANVAS_H)):
                       'x': r.get('x', 0), 'y': r.get('y', 0)})
     meta = dict(out.get('stats') or {})
     meta['warnings'] = (out.get('warnings') or [])[:8]
+    raw_nodes, raw_edges = len(nodes), len(edges)
+    nodes, edges = _connect_components(nodes, edges)
+    nodes, edges = _simplify_network(nodes, edges)
+    meta['raw_nodes'] = raw_nodes
+    meta['raw_edges'] = raw_edges
+    meta['simplified_nodes'] = len(nodes)
+    meta['simplified_edges'] = len(edges)
     return nodes, edges, seats, rooms, meta
