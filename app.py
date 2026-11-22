@@ -929,7 +929,13 @@ def api_nav():
     if not s:
         return jsonify({'ok': False, 'error': '座位不存在'}), 404
     start = request.args.get('from', 'entry')
-    r = navigation.plan_path(s['floor_id'], start, 's_%s' % s['code'])
+    start_xy = None
+    try:
+        if request.args.get('start_x') is not None and request.args.get('start_y') is not None:
+            start_xy = (float(request.args.get('start_x')), float(request.args.get('start_y')))
+    except (TypeError, ValueError):
+        start_xy = None
+    r = navigation.plan_path(s['floor_id'], start, 's_%s' % s['code'], start_xy=start_xy)
     r['seat'] = s
     fl = db.one('SELECT * FROM floors WHERE id=?', (s['floor_id'],))
     if fl:

@@ -62,8 +62,26 @@ def _add_seat_node(floor_id, end_code, nodes, adj):
     return end_code
 
 
-def plan_path(floor_id, start_code, end_code):
+def plan_path(floor_id, start_code, end_code, start_xy=None):
     nodes, adj = build_graph(floor_id)
+    if start_xy:
+        try:
+            sx, sy = float(start_xy[0]), float(start_xy[1])
+        except Exception:
+            sx = sy = None
+        if sx is not None and nodes:
+            nearest, best = None, 1e18
+            for code, n in nodes.items():
+                d = (n["x"] - sx) ** 2 + (n["y"] - sy) ** 2
+                if d < best:
+                    nearest, best = code, d
+            if nearest:
+                temp = "__temp_start__"
+                nodes[temp] = {"x": sx, "y": sy, "kind": "entry"}
+                dist = math.sqrt(best)
+                adj[temp] = [(nearest, dist)]
+                adj[nearest].append((temp, dist))
+                start_code = temp
     start_code = _resolve_start(nodes, start_code)
     end_code = _add_seat_node(floor_id, end_code, nodes, adj)
     if start_code not in nodes or end_code not in nodes:

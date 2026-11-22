@@ -567,3 +567,8 @@ img.avatar{object-fit:cover;display:inline-block;border-radius:50%}
 .mini{border:0;background:transparent;color:var(--muted);font-size:11px;padding:2px 6px;border-radius:6px;cursor:pointer}
 .mini:hover{background:#eef2f6;color:var(--ink)}
 .mini.danger:hover{background:#fdecea;color:#b03a2e}
+
+.nav-context-menu{position:fixed;z-index:80;background:#fff;border:1px solid var(--line);border-radius:9px;box-shadow:0 8px 24px rgba(15,23,42,.12);padding:4px;min-width:120px}
+.nav-context-menu[hidden]{display:none}
+.nav-context-menu button{display:block;width:100%;border:0;background:transparent;text-align:left;padding:8px 12px;border-radius:6px;color:var(--ink);font-size:12.5px;cursor:pointer}
+.nav-context-menu button:hover{background:var(--blue-soft);color:var(--accent)}

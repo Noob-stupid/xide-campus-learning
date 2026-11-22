@@ -25,7 +25,9 @@
       <g id="navSeats"></g>
       <polyline id="navPath" fill="none" stroke="#c98a2e" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity="0"></polyline>
       <g id="navNodes"></g>
+      <g id="tempStartMarker"></g>
     </svg>
+    <div class="nav-context-menu" id="navCtx" hidden><button type="button" id="setTempStart">从这里出发</button></div>
   </section>
 
   <aside class="stack">
@@ -53,7 +55,7 @@
   const qs = new URLSearchParams(location.search);
   let seatId = Number(qs.get('seat_id') || 0);
   let startCode = qs.get('from') || localStorage.getItem('xide_start_' + (qs.get('seat_id') || '')) || 'entry';
-  let currentSession = null, reservation = null, seat = null;
+  let currentSession = null, reservation = null, seat = null, tempStart = null;
 
 
   /* 画布尺寸跟随楼层：底图可能是竖图，viewBox 和墙体装饰都要按实际画布来 */
@@ -118,6 +120,22 @@
     document.getElementById('navNodes').innerHTML = path.map((p, i) =>
       '<circle cx="' + p.x + '" cy="' + p.y + '" r="' + (i === path.length - 1 ? 9 : 5) + '" fill="' + (i === path.length - 1 ? '#0f2a4a' : '#ffffff') + '" stroke="#c98a2e" stroke-width="2"></circle>').join('');
   }
+  function svgPoint(ev) {
+    const svg = document.getElementById('navSvg');
+    const p = svg.createSVGPoint();
+    p.x = ev.clientX; p.y = ev.clientY;
+    const m = svg.getScreenCTM();
+    return m ? p.matrixTransform(m.inverse()) : { x: 0, y: 0 };
+  }
+
+  function drawTempStart() {
+    const g = document.getElementById('tempStartMarker');
+    if (!g) return;
+    if (!tempStart) { g.innerHTML = ''; return; }
+    g.innerHTML = '<circle cx="' + tempStart.x + '" cy="' + tempStart.y + '" r="8" fill="#0f766e" stroke="#fff" stroke-width="2"></circle>' +
+      '<circle cx="' + tempStart.x + '" cy="' + tempStart.y + '" r="14" fill="none" stroke="#0f766e" stroke-width="1" stroke-dasharray="3 3"></circle>';
+  }
+
   async function loadStartNodes(fid) {
     try {
       const r = await ZX.api('/api/nav/nodes?floor_id=' + fid);
@@ -129,6 +147,23 @@
       if (nodes.some(n => n.code === startCode)) sel.value = startCode;
     } catch (e) {}
   }
+
+  const navSvg = document.getElementById('navSvg');
+  const navCtx = document.getElementById('navCtx');
+  navSvg.addEventListener('contextmenu', ev => {
+    ev.preventDefault();
+    const p = svgPoint(ev);
+    tempStart = { x: Math.round(p.x), y: Math.round(p.y) };
+    drawTempStart();
+    navCtx.style.left = ev.clientX + 'px';
+    navCtx.style.top = ev.clientY + 'px';
+    navCtx.hidden = false;
+  });
+  document.addEventListener('click', () => { if (navCtx) navCtx.hidden = true; });
+  document.getElementById('setTempStart').addEventListener('click', () => {
+    navCtx.hidden = true;
+    load();
+  });
 
   async function load() {
     try {
@@ -142,7 +177,9 @@
         }
       }
       if (!seatId) { document.getElementById('navHint').textContent = '还没有预约，先去空间选一个座位。'; return; }
-      const nav = await ZX.api('/api/nav?seat_id=' + seatId + '&from=' + encodeURIComponent(startCode));
+      let navUrl = '/api/nav?seat_id=' + seatId + '&from=' + encodeURIComponent(startCode);
+      if (tempStart) navUrl += '&start_x=' + encodeURIComponent(tempStart.x) + '&start_y=' + encodeURIComponent(tempStart.y);
+      const nav = await ZX.api(navUrl);
     if (nav.floor) { applyCanvas(nav.floor.canvas_w, nav.floor.canvas_h, nav.floor.plan_url); loadStartNodes(nav.floor.id); }
       if (!nav.ok) { document.getElementById('navHint').textContent = nav.error || '路径规划失败'; return; }
       seat = nav.seat;
@@ -158,6 +195,7 @@
       document.getElementById('navSteps').textContent = nav.path.length * 3;
       document.getElementById('navStepList').innerHTML = nav.steps.map((s, i) => '<div class="nav-step"><span class="n">' + (i + 1) + '</span><span class="t">' + ZX.escapeHtml(s) + '</span></div>').join('');
       drawPath(nav.path);
+      if (tempStart) { tempStart = null; drawTempStart(); }
       document.getElementById('navHint').textContent = '路径已生成 · ' + nav.distance + ' 米 · 约 ' + nav.minutes + ' 分钟';
       const cur = await ZX.api('/api/sessions/current');
       currentSession = cur.session;
