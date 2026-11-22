@@ -479,3 +479,86 @@ img.avatar{object-fit:cover;display:inline-block;border-radius:50%}
 .ask-reco{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line-2);background:#fff;border-radius:10px;padding:10px 12px}
 .ask-reco > div{display:flex;flex-direction:column;gap:3px;min-width:0}
 .ask-reco small{color:var(--muted);font-size:11px;line-height:1.4}
+
+/* ---------- 后台编排：座位 / 路网编辑器 ---------- */
+.edit-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
+.edit-toolbar .seg{display:inline-flex;gap:4px;padding:3px;background:#eef1f6;border-radius:10px}
+.edit-toolbar .seg .chip{border:0;background:transparent;padding:6px 12px;font-size:12.5px;border-radius:8px}
+.edit-toolbar .seg .chip.active{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(16,24,40,.10)}
+.edit-toolbar label.small{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
+.edit-toolbar .input{width:auto;padding:5px 8px}
+.edit-zoom{display:inline-flex;align-items:center;gap:6px}
+.edit-zoom b{font-variant-numeric:tabular-nums;font-size:12px;color:var(--muted);min-width:38px;text-align:center}
+
+.edit-canvas{position:relative;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;touch-action:none}
+.edit-canvas{display:flex;align-items:flex-start;justify-content:center}
+/* 画布比例跟着底图走（可能是竖图），按可用高度自适应，不把页面撑长 */
+.edit-canvas svg{display:block;width:auto;height:auto;max-width:100%;max-height:72vh;cursor:crosshair}
+.edit-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#fbfcfe}
+.edit-empty[hidden]{display:none}
+
+/* 座位 */
+.edit-canvas .seat{cursor:grab}
+.edit-canvas .seat rect{stroke:#cdd7e4;stroke-width:1;rx:5}
+.edit-canvas .seat text{font-size:8px;fill:#41536b;text-anchor:middle;pointer-events:none}
+.edit-canvas .seat.free rect{fill:#e8f5f2}
+.edit-canvas .seat.booked rect{fill:#f8e4c4;stroke:#d9b47a}
+.edit-canvas .seat.using rect{fill:#f3c7c2;stroke:#d49a93}
+.edit-canvas .seat.occupied rect{fill:#f6d9d6;stroke:#d8a39d}
+.edit-canvas .seat.maintenance rect{fill:#e5e8ee;stroke:#b9c1cd}
+.edit-canvas .seat.mine rect{stroke:var(--amber);stroke-width:2.4}
+.edit-canvas .seat.selected rect{fill:#fff;stroke:var(--amber);stroke-width:2.4}
+.edit-canvas .seat.selected text{fill:#2b3a4a;font-weight:600}
+
+/* 路网 */
+#layerNet .net-edge{stroke:#0f766e;stroke-width:1.4;stroke-opacity:.5;stroke-linecap:round}
+#layerNet .net-node circle{fill:#fff;stroke:#0f766e;stroke-width:1.8;cursor:grab}
+#layerNet .net-node text{font-size:7.5px;fill:#5b6673;text-anchor:middle;pointer-events:none}
+#layerNet .net-node.selected circle{fill:#0f766e;stroke:#0b5f59}
+#layerNet .net-node.selected text{fill:#0f766e;font-weight:600}
+#layerNet .net-node.pending circle{fill:#fff2d6;stroke:#a35b00;stroke-width:2.2}
+#layerNet .net-entry circle{fill:#2b3a4a;stroke:#fff;stroke-width:2}
+#layerNet .net-entry text{font-size:7.5px;fill:#2b3a4a;text-anchor:middle;pointer-events:none}
+
+.edit-inspector{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-top:12px;
+  padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fafbfd}
+.edit-inspector label.small{display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--muted)}
+.edit-inspector .input{width:130px;padding:5px 8px}
+
+.edit-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px}
+.edit-actions label.small{display:inline-flex;align-items:center;gap:5px;color:var(--muted);font-size:12px}
+.edit-shift{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px;
+  padding:10px 12px;border:1px dashed var(--line);border-radius:10px;background:#fbfcfe}
+.edit-shift label.small{display:inline-flex;align-items:center;gap:5px;color:var(--muted);font-size:12px}
+.edit-shift .input{width:76px;padding:5px 8px}
+.edit-stat{margin-top:10px;font-size:12.5px;color:var(--muted)}
+.edit-stat b{color:var(--ink);font-variant-numeric:tabular-nums}
+
+/* ---------- 楼层栏：搜索 / 分组 / 折叠 / 新建 ---------- */
+.floor-bar{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+.floor-bar .input{flex:1;min-width:0;padding:7px 10px}
+.floor-form{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:12px;
+  padding:10px;border:1px dashed var(--line);border-radius:10px;background:#fbfcfe}
+.floor-form label.small{display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--muted)}
+.floor-form .input{width:150px;padding:6px 9px}
+.floor-form-actions{display:flex;gap:6px;margin-left:auto}
+
+.floor-group{margin-bottom:6px}
+.floor-group-head{display:flex;align-items:center;gap:8px;width:100%;padding:7px 8px;border:0;background:transparent;
+  cursor:pointer;border-radius:8px;text-align:left;font-size:12.5px;color:var(--ink)}
+.floor-group-head:hover{background:#f2f5f8}
+.floor-group-head .chev{width:12px;color:var(--muted);font-size:11px}
+.floor-group-head small{margin-left:auto;color:var(--muted);font-size:11px}
+
+.floor-row{display:flex;align-items:center;gap:6px;padding:0 2px 0 6px;border-radius:10px}
+.floor-row.active{background:#eef2fb}
+.floor-pick{flex:1;display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;
+  padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer;text-align:left}
+.floor-row.active .floor-pick{border-color:var(--ink);box-shadow:0 0 0 2px rgba(15,42,74,.08)}
+.floor-pick span:first-child{display:flex;flex-direction:column;gap:3px;min-width:0}
+.floor-pick b{font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.floor-pick small{color:var(--muted);font-size:11px}
+.floor-ops{display:flex;flex-direction:column;gap:2px}
+.mini{border:0;background:transparent;color:var(--muted);font-size:11px;padding:2px 6px;border-radius:6px;cursor:pointer}
+.mini:hover{background:#eef2f6;color:var(--ink)}
+.mini.danger:hover{background:#fdecea;color:#b03a2e}

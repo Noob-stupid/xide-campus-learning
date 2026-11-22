@@ -162,7 +162,36 @@
     ZX.toast('推荐 ' + free[0].code + '：靠窗/安静/电源综合最优');
   }
 
+
+  /* 画布尺寸跟随楼层：底图可能是竖图，viewBox 和墙体装饰都要按实际画布来 */
+  function applyCanvas(cw, ch) {
+    cw = Number(cw) || 960; ch = Number(ch) || 620;
+    const svg = document.getElementById('seatSvg');
+    if (!svg) return;
+    svg.setAttribute('viewBox', '0 0 ' + cw + ' ' + ch);
+    const wall = svg.querySelector('.wall');
+    if (wall) {
+      wall.setAttribute('x', 20); wall.setAttribute('y', 20);
+      wall.setAttribute('width', cw - 40); wall.setAttribute('height', ch - 40);
+    }
+    const corr = svg.querySelector('.corridor');
+    if (corr) {
+      corr.setAttribute('d', 'M56 ' + (ch / 2) + ' H' + (cw - 56) +
+        ' M' + (cw / 2) + ' ' + (ch / 2) + ' V' + (ch - 22));
+    }
+    const entry = svg.querySelector('.entry');
+    if (entry) { entry.setAttribute('cx', cw / 2); entry.setAttribute('cy', ch - 22); }
+    const et = svg.querySelector('.entry-text');
+    if (et) { et.setAttribute('x', cw / 2); et.setAttribute('y', ch - 18); }
+    const plan = svg.querySelector('#floorPlanImage');
+    if (plan) {
+      plan.setAttribute('x', 20); plan.setAttribute('y', 20);
+      plan.setAttribute('width', cw - 40); plan.setAttribute('height', ch - 40);
+    }
+  }
+
   function applyFloorPlan(fl) {
+    if (fl) applyCanvas(fl.canvas_w, fl.canvas_h);
     const img = document.getElementById('floorPlanImage');
     if (!img) return;
     if (fl && fl.plan_url) { img.setAttribute('href', fl.plan_url); img.style.display = ''; }

@@ -50,6 +50,34 @@
   let seatId = Number(qs.get('seat_id') || 0);
   let currentSession = null, reservation = null, seat = null;
 
+
+  /* 画布尺寸跟随楼层：底图可能是竖图，viewBox 和墙体装饰都要按实际画布来 */
+  function applyCanvas(cw, ch) {
+    cw = Number(cw) || 960; ch = Number(ch) || 620;
+    const svg = document.getElementById('navSvg');
+    if (!svg) return;
+    svg.setAttribute('viewBox', '0 0 ' + cw + ' ' + ch);
+    const wall = svg.querySelector('.wall');
+    if (wall) {
+      wall.setAttribute('x', 20); wall.setAttribute('y', 20);
+      wall.setAttribute('width', cw - 40); wall.setAttribute('height', ch - 40);
+    }
+    const corr = svg.querySelector('.corridor');
+    if (corr) {
+      corr.setAttribute('d', 'M56 ' + (ch / 2) + ' H' + (cw - 56) +
+        ' M' + (cw / 2) + ' ' + (ch / 2) + ' V' + (ch - 22));
+    }
+    const entry = svg.querySelector('.entry');
+    if (entry) { entry.setAttribute('cx', cw / 2); entry.setAttribute('cy', ch - 22); }
+    const et = svg.querySelector('.entry-text');
+    if (et) { et.setAttribute('x', cw / 2); et.setAttribute('y', ch - 18); }
+    const plan = svg.querySelector('#floorPlanImage');
+    if (plan) {
+      plan.setAttribute('x', 20); plan.setAttribute('y', 20);
+      plan.setAttribute('width', cw - 40); plan.setAttribute('height', ch - 40);
+    }
+  }
+
   function drawSeats(seats) {
     const g = document.getElementById('navSeats');
     g.innerHTML = seats.map(s => '<circle cx="' + s.x + '" cy="' + s.y + '" r="4" fill="' + (s.id === seatId ? '#c98a2e' : '#cfd8e4') + '"></circle>').join('');
@@ -86,6 +114,7 @@
       }
       if (!seatId) { document.getElementById('navHint').textContent = '还没有预约，先去空间选一个座位。'; return; }
       const nav = await ZX.api('/api/nav?seat_id=' + seatId + '&from=entry');
+    if (nav.floor) applyCanvas(nav.floor.canvas_w, nav.floor.canvas_h);
       if (!nav.ok) { document.getElementById('navHint').textContent = nav.error || '路径规划失败'; return; }
       seat = nav.seat;
       const seatsRes = await ZX.api('/api/seats?floor_id=' + seat.floor_id);

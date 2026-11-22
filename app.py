@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """习得 · Web 应用入口。"""
+import json
 import os
+import re
 import threading
 import time
 import uuid
@@ -14,9 +16,25 @@ from flask import (Flask, abort, jsonify, redirect, render_template, request,
 import db
 import seed
 from config import (AMAP_JS_KEY, AMAP_SECURITY_CODE, DATA_DIR, HOST, MAX_FRAMES, MEDIA_DIR, PORT, SECRET_KEY, SENSOR_TOKEN, SUSPICIOUS_RISK, UPLOAD_DIR)
-from services import devices, flow, llm, navigation, outdoor, relay, seats
+from services import devices, flow, llm, navigation, netgen, netgraph, outdoor, relay, seats
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
+
+
+def _ensure_canvas_columns():
+    """floors 增加画布尺寸列（老库幂等补列）。"""
+    for sql in ("ALTER TABLE floors ADD COLUMN canvas_w REAL DEFAULT 960",
+                "ALTER TABLE floors ADD COLUMN canvas_h REAL DEFAULT 620"):
+        try:
+            db.execute(sql)
+        except Exception:
+            pass
+
+
+try:
+    _ensure_canvas_columns()
+except Exception:
+    pass
 app.secret_key = SECRET_KEY
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
 app.config.update(
@@ -318,7 +336,29 @@ def api_admin_upload_floor_plan(fid):
         return jsonify({'ok': False, 'error': '不是有效图片'}), 400
     rel = os.path.relpath(path, DATA_DIR).replace(os.sep, '/')
     old = (floor['plan_path'] or '') if 'plan_path' in dict(floor) else ''
-    db.execute('UPDATE floors SET plan_path=?, plan_w=?, plan_h=? WHERE id=?', (rel, w, h, fid))
+
+    # 画布跟着底图比例走：短边不小于 620（竖图则宽不小于 960），绝不压扁底图
+    ratio = float(w) / max(1.0, float(h))
+    if ratio >= 1:
+        cw, ch = max(960.0, round(620.0 * ratio, 1)), 620.0
+    else:
+        cw, ch = 960.0, max(620.0, round(960.0 / ratio, 1))
+
+    old_cw = float(dict(floor).get('canvas_w') or 960)
+    old_ch = float(dict(floor).get('canvas_h') or 620)
+    if abs(cw - old_cw) > 0.5 or abs(ch - old_ch) > 0.5:
+        # 画布比例变了：已有座位/路网按比例重映射，保持相对位置
+        kx, ky = cw / max(1.0, old_cw), ch / max(1.0, old_ch)
+        for r in db.query('SELECT id,x,y FROM seats WHERE floor_id=?', (fid,)):
+            db.execute('UPDATE seats SET x=?, y=? WHERE id=?',
+                       (round(float(r['x']) * kx, 1), round(float(r['y']) * ky, 1), r['id']))
+        for r in db.query('SELECT id,x,y FROM nav_nodes WHERE floor_id=?', (fid,)):
+            db.execute('UPDATE nav_nodes SET x=?, y=? WHERE id=?',
+                       (round(float(r['x']) * kx, 1), round(float(r['y']) * ky, 1), r['id']))
+        netgraph.refresh_edges(fid)
+
+    db.execute('UPDATE floors SET plan_path=?, plan_w=?, plan_h=?, canvas_w=?, canvas_h=? WHERE id=?',
+               (rel, w, h, cw, ch, fid))
     if old and old != rel:
         old_abs = os.path.join(DATA_DIR, old.replace('/', os.sep))
         try:
@@ -326,7 +366,8 @@ def api_admin_upload_floor_plan(fid):
                 os.remove(old_abs)
         except Exception:
             pass
-    return jsonify({'ok': True, 'floor_id': fid, 'plan_url': media_url(rel), 'plan_path': rel, 'width': w, 'height': h})
+    return jsonify({'ok': True, 'floor_id': fid, 'plan_url': media_url(rel), 'plan_path': rel,
+                    'width': w, 'height': h, 'canvas_w': cw, 'canvas_h': ch})
 
 
 @app.route('/api/admin/floors/<int:fid>/plan', methods=['DELETE'])
@@ -346,6 +387,459 @@ def api_admin_delete_floor_plan(fid):
         except Exception:
             pass
     return jsonify({'ok': True, 'floor_id': fid})
+
+# ---------------------------------------------------------------------------
+# 地点 / 楼层管理：名字由管理员自己起，地点就是 buildings 表
+# ---------------------------------------------------------------------------
+def _json_body():
+    d = request.get_json(silent=True)
+    if d is None and request.data:
+        try:
+            d = json.loads(request.data.decode('utf-8'))
+        except Exception:
+            d = None
+    return d or {}
+
+
+def _ensure_building(name, lat=0.0, lng=0.0, code=''):
+    row = db.one('SELECT * FROM buildings WHERE name=?', (name,))
+    if row:
+        return dict(row)
+    db.execute('INSERT INTO buildings(name,code,lat,lng) VALUES(?,?,?,?)', (name, code, lat, lng))
+    return dict(db.one('SELECT * FROM buildings WHERE name=?', (name,)))
+
+
+def _floor_json(fid):
+    row = db.one('SELECT f.*, (SELECT COUNT(*) FROM seats s WHERE s.floor_id=f.id) AS seat_count, '
+                 '(SELECT COUNT(*) FROM nav_nodes n WHERE n.floor_id=f.id) AS nav_count '
+                 'FROM floors f WHERE f.id=?', (fid,))
+    if not row:
+        return None
+    item = dict(row)
+    item['plan_url'] = media_url(item.get('plan_path'))
+    return item
+
+
+@app.route('/api/admin/floors', methods=['POST'])
+@login_required
+@role_required('admin')
+def api_admin_floor_create():
+    d = _json_body()
+    building = str(d.get('building') or '').strip()[:30]
+    name = str(d.get('name') or '').strip()[:30]
+    if not building:
+        return jsonify({'ok': False, 'error': '地点名不能为空'}), 400
+    if not name:
+        return jsonify({'ok': False, 'error': '楼层名不能为空'}), 400
+    try:
+        floor_no = int(d.get('floor_no') or 1)
+    except Exception:
+        floor_no = 1
+    if db.one('SELECT id FROM floors WHERE building=? AND name=?', (building, name)):
+        return jsonify({'ok': False, 'error': '这个地点下已经有「%s」' % name}), 400
+    _ensure_building(building, float(d.get('lat') or 0), float(d.get('lng') or 0))
+    fid = db.execute('INSERT INTO floors(name,building,floor_no) VALUES(?,?,?)', (name, building, floor_no))
+    return jsonify({'ok': True, 'floor': _floor_json(fid)})
+
+
+@app.route('/api/admin/floors/<int:fid>', methods=['PUT', 'PATCH'])
+@login_required
+@role_required('admin')
+def api_admin_floor_update(fid):
+    floor = db.one('SELECT * FROM floors WHERE id=?', (fid,))
+    if not floor:
+        return jsonify({'ok': False, 'error': '楼层不存在'}), 404
+    d = _json_body()
+    sets, args = [], []
+    for field in ('name', 'building'):
+        if field in d:
+            val = str(d.get(field) or '').strip()[:30]
+            if not val:
+                return jsonify({'ok': False, 'error': '名称不能为空'}), 400
+            sets.append('%s=?' % field)
+            args.append(val)
+    if 'floor_no' in d:
+        try:
+            sets.append('floor_no=?')
+            args.append(int(d.get('floor_no') or 1))
+        except Exception:
+            pass
+    if not sets:
+        return jsonify({'ok': False, 'error': '没有要改的字段'}), 400
+    args.append(fid)
+    db.execute('UPDATE floors SET %s WHERE id=?' % ', '.join(sets), tuple(args))
+    if d.get('building'):
+        _ensure_building(str(d['building']).strip()[:30])
+    return jsonify({'ok': True, 'floor': _floor_json(fid)})
+
+
+@app.route('/api/admin/floors/<int:fid>', methods=['DELETE'])
+@login_required
+@role_required('admin')
+def api_admin_floor_delete(fid):
+    floor = db.one('SELECT * FROM floors WHERE id=?', (fid,))
+    if not floor:
+        return jsonify({'ok': False, 'error': '楼层不存在'}), 404
+    seats = db.one('SELECT COUNT(*) AS c FROM seats WHERE floor_id=?', (fid,))['c']
+    if seats:
+        return jsonify({'ok': False, 'error': '这层还有 %d 个座位，先清空再删' % seats}), 400
+    plan = dict(floor).get('plan_path') or ''
+    db.execute('DELETE FROM nav_edges WHERE floor_id=?', (fid,))
+    db.execute('DELETE FROM nav_nodes WHERE floor_id=?', (fid,))
+    db.execute('DELETE FROM floors WHERE id=?', (fid,))
+    if plan:
+        try:
+            p = os.path.join(DATA_DIR, plan.replace('/', os.sep))
+            if os.path.exists(p):
+                os.remove(p)
+        except Exception:
+            pass
+    left = db.one('SELECT COUNT(*) AS c FROM floors WHERE building=?', (floor['building'],))['c']
+    if not left:
+        db.execute('DELETE FROM buildings WHERE name=?', (floor['building'],))
+    return jsonify({'ok': True, 'floor_id': fid})
+
+
+@app.route('/api/admin/nodes/bulk-delete', methods=['POST'])
+@login_required
+@role_required('admin')
+def api_admin_nodes_bulk_delete():
+    d = _json_body()
+    ids = [int(i) for i in (d.get('ids') or []) if str(i).isdigit()]
+    if not ids:
+        return jsonify({'ok': False, 'error': '没有选中节点'}), 400
+    deleted, floors = 0, set()
+    for nid in ids:
+        node = db.one('SELECT * FROM nav_nodes WHERE id=?', (nid,))
+        if not node:
+            continue
+        db.execute('DELETE FROM nav_edges WHERE floor_id=? AND (from_node=? OR to_node=?)',
+                   (node['floor_id'], node['code'], node['code']))
+        db.execute('DELETE FROM nav_nodes WHERE id=?', (nid,))
+        floors.add(node['floor_id'])
+        deleted += 1
+    for fid in floors:
+        _nav_reset(fid)
+    return jsonify({'ok': True, 'deleted': deleted})
+
+
+# ---------------------------------------------------------------------------
+# 后台编排：路网（节点/连线）、座位、整体平移、自动生成、诊断
+# ---------------------------------------------------------------------------
+def _nav_reset(floor_id=None):
+    """路网改完让寻路拿到新数据；当前 navigation 没有缓存，留个挂点。"""
+    fn = getattr(navigation, 'invalidate_temp_graphs', None)
+    if callable(fn):
+        try:
+            fn(floor_id)
+        except Exception:
+            pass
+
+
+def _floor_or_404(fid):
+    floor = db.one('SELECT * FROM floors WHERE id=?', (fid,))
+    if not floor:
+        raise LookupError('楼层不存在')
+    return floor
+
+
+@app.route('/api/admin/floors/<int:fid>/network')
+@login_required
+@role_required('admin')
+def api_admin_network(fid):
+    try:
+        _floor_or_404(fid)
+    except LookupError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 404
+    return jsonify(dict(ok=True, **netgraph.network(fid)))
+
+
+@app.route('/api/admin/floors/<int:fid>/nodes', methods=['POST'])
+@login_required
+@role_required('admin')
+def api_admin_node_create(fid):
+    d = request.get_json(silent=True) or {}
+    try:
+        node = netgraph.create_node(fid, d.get('x'), d.get('y'),
+                                    kind=d.get('kind') or 'corridor', code=d.get('code') or '')
+        return jsonify({'ok': True, 'node': node})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+
+
+@app.route('/api/admin/nodes/<int:nid>', methods=['PUT', 'PATCH'])
+@login_required
+@role_required('admin')
+def api_admin_node_update(nid):
+    d = request.get_json(silent=True) or {}
+    try:
+        node = netgraph.update_node(nid, **d)
+        _nav_reset(node['floor_id'])
+        return jsonify({'ok': True, 'node': node})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+
+
+@app.route('/api/admin/nodes/<int:nid>', methods=['DELETE'])
+@login_required
+@role_required('admin')
+def api_admin_node_delete(nid):
+    try:
+        node = netgraph.delete_node(nid)
+        _nav_reset(node['floor_id'])
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+
+
+@app.route('/api/admin/floors/<int:fid>/edges', methods=['POST'])
+@login_required
+@role_required('admin')
+def api_admin_edge_create(fid):
+    d = request.get_json(silent=True) or {}
+    try:
+        edge = netgraph.link(fid, d.get('from_node'), d.get('to_node'))
+        _nav_reset(fid)
+        return jsonify({'ok': True, 'edge': edge})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+
+
+@app.route('/api/admin/edges/<int:eid>', methods=['DELETE'])
+@login_required
+@role_required('admin')
+def api_admin_edge_delete(eid):
+    try:
+        edge = netgraph.unlink(eid)
+        _nav_reset(edge['floor_id'])
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+
+
+@app.route('/api/admin/floors/<int:fid>/network/join', methods=['POST'])
+@login_required
+@role_required('admin')
+def api_admin_network_join(fid):
+    d = request.get_json(silent=True) or {}
+    try:
+        added = netgraph.join_components(fid, limit=d.get('limit'))
+        _nav_reset(fid)
+        return jsonify({'ok': True, 'added': added, 'stats': netgraph.network(fid)['stats']})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+
+
+@app.route('/api/admin/floors/<int:fid>/network', methods=['DELETE'])
+@login_required
+@role_required('admin')
+def api_admin_network_clear(fid):
+    netgraph.clear_network(fid)
+    _nav_reset(fid)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/admin/floors/<int:fid>/transform', methods=['POST'])
+@login_required
+@role_required('admin')
+def api_admin_transform(fid):
+    d = request.get_json(silent=True) or {}
+    try:
+        moved = netgraph.transform(fid, d.get('scale', 1), d.get('dx', 0), d.get('dy', 0),
+                                   with_seats=bool(d.get('with_seats', True)))
+        _nav_reset(fid)
+        return jsonify({'ok': True, 'moved': moved})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+
+
+@app.route('/api/admin/floors/<int:fid>/network/diagnose')
+@login_required
+@role_required('admin')
+def api_admin_network_diagnose(fid):
+    try:
+        return jsonify(netgraph.diagnose(fid))
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+
+
+@app.route('/api/admin/floors/<int:fid>/network/generate', methods=['POST'])
+@login_required
+@role_required('admin')
+def api_admin_network_generate(fid):
+    """用这一层已有的底图生成路网（图片路线）。"""
+    try:
+        floor = _floor_or_404(fid)
+    except LookupError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 404
+    plan = (dict(floor).get('plan_path') or '')
+    if not plan:
+        return jsonify({'ok': False, 'error': '这一层还没有底图，先上传平面图'}), 400
+    path = os.path.join(DATA_DIR, plan.replace('/', os.sep))
+    if not os.path.exists(path):
+        return jsonify({'ok': False, 'error': '底图文件丢了，请重新上传'}), 400
+    cv = dict(floor)
+    cw, ch = float(cv.get('canvas_w') or 960), float(cv.get('canvas_h') or 620)
+    try:
+        nodes, edges, meta = netgen.from_image(path, size=(int(cw), int(ch)))
+    except Exception as e:
+        return jsonify({'ok': False, 'error': '生成失败：%s' % e}), 400
+    n_cnt, e_cnt = netgraph.replace_network(fid, nodes, edges)
+    joined = netgraph.join_components(fid, limit=140)   # 正交邻接会把图切成几块，自动接回来
+    _nav_reset(fid)
+    return jsonify({'ok': True, 'nodes': n_cnt, 'edges': e_cnt + len(joined),
+                    'joined': len(joined), 'meta': meta,
+                    'stats': netgraph.network(fid)['stats']})
+
+
+@app.route('/api/admin/floors/<int:fid>/network/from-dxf', methods=['POST'])
+@login_required
+@role_required('admin')
+def api_admin_network_from_dxf(fid):
+    """上传 DXF：墙线铺路网，家具出座位候选，文字层出房间名。"""
+    try:
+        _floor_or_404(fid)
+    except LookupError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 404
+    f = request.files.get('file')
+    if not f or not f.filename:
+        return jsonify({'ok': False, 'error': '请选择 .dxf 文件'}), 400
+    if not f.filename.lower().endswith('.dxf'):
+        return jsonify({'ok': False, 'error': '只支持 DXF'}), 400
+    raw = f.read()
+    if len(raw) > 24 * 1024 * 1024:
+        return jsonify({'ok': False, 'error': '文件不能超过 24MB'}), 400
+    apply_seats = str(request.form.get('apply_seats') or '') in ('1', 'true', 'True')
+    fl = dict(_floor_or_404(fid))
+    cw, ch = float(fl.get('canvas_w') or 960), float(fl.get('canvas_h') or 620)
+    try:
+        nodes, edges, seats, rooms, meta = netgen.from_dxf(raw, size=(int(cw), int(ch)))
+    except Exception as e:
+        return jsonify({'ok': False, 'error': '解析失败：%s' % e}), 400
+    n_cnt, e_cnt = netgraph.replace_network(fid, nodes, edges)
+    joined = netgraph.join_components(fid, limit=160)
+    _nav_reset(fid)
+
+    created = 0
+    if apply_seats and seats:
+        existing = {r['code'] for r in db.query('SELECT code FROM seats WHERE floor_id=?', (fid,))}
+        for cand in seats:
+            code = cand['code']
+            if code in existing:
+                continue
+            db.execute('INSERT INTO seats(floor_id,code,zone,x,y,w,h,seat_type,features,status) '
+                       'VALUES(?,?,?,?,?,?,?,?,?,?)',
+                       (fid, code, 'CAD', cand['x'], cand['y'], 30, 24, 'normal', '', 'free'))
+            existing.add(code)
+            created += 1
+
+    return jsonify({'ok': True, 'nodes': n_cnt, 'edges': e_cnt + len(joined),
+                    'joined': len(joined), 'seats': len(seats), 'seat_created': created,
+                    'rooms': rooms[:40], 'meta': meta,
+                    'stats': netgraph.network(fid)['stats']})
+
+
+# ---- 座位：单个增改删 + 批量删除 + 批量落库（DXF 候选） ----
+@app.route('/api/admin/floors/<int:fid>/seats', methods=['POST'])
+@login_required
+@role_required('admin')
+def api_admin_seat_create(fid):
+    d = request.get_json(silent=True) or {}
+    try:
+        x, y = netgraph._clamp(d.get('x'), d.get('y'))
+    except Exception:
+        return jsonify({'ok': False, 'error': '坐标不合法'}), 400
+    code = str(d.get('code') or '').strip()[:12]
+    if not code:
+        rows = db.query('SELECT code FROM seats WHERE floor_id=?', (fid,))
+        top = 0
+        for r in rows:
+            m = re.search(r'(\d+)$', str(r['code'] or ''))
+            if m:
+                top = max(top, int(m.group(1)))
+        code = 'S-%02d' % (top + 1)
+    if db.one('SELECT id FROM seats WHERE floor_id=? AND code=?', (fid, code)):
+        return jsonify({'ok': False, 'error': '座位号 %s 已存在' % code}), 400
+    sid = db.execute('INSERT INTO seats(floor_id,code,zone,x,y,w,h,seat_type,features,status) '
+                     'VALUES(?,?,?,?,?,?,?,?,?,?)',
+                     (fid, code, str(d.get('zone') or '自习区')[:20], x, y,
+                      float(d.get('w') or 30), float(d.get('h') or 24),
+                      str(d.get('seat_type') or 'normal'), str(d.get('features') or '')[:60], 'free'))
+    return jsonify({'ok': True, 'seat': dict(db.one('SELECT * FROM seats WHERE id=?', (sid,)))})
+
+
+@app.route('/api/admin/seats/<int:sid>', methods=['PUT', 'PATCH'])
+@login_required
+@role_required('admin')
+def api_admin_seat_update(sid):
+    seat = db.one('SELECT * FROM seats WHERE id=?', (sid,))
+    if not seat:
+        return jsonify({'ok': False, 'error': '座位不存在'}), 404
+    d = request.get_json(silent=True) or {}
+    sets, args = [], []
+    if 'x' in d or 'y' in d:
+        try:
+            x, y = netgraph._clamp(d.get('x', seat['x']), d.get('y', seat['y']))
+        except Exception:
+            return jsonify({'ok': False, 'error': '坐标不合法'}), 400
+        sets += ['x=?', 'y=?']
+        args += [x, y]
+    if 'code' in d:
+        code = str(d.get('code') or '').strip()[:12]
+        if not code:
+            return jsonify({'ok': False, 'error': '座位号不能为空'}), 400
+        if db.one('SELECT id FROM seats WHERE floor_id=? AND code=? AND id<>?', (seat['floor_id'], code, sid)):
+            return jsonify({'ok': False, 'error': '这一层已经有 %s' % code}), 400
+        sets.append('code=?')
+        args.append(code)
+    for field in ('zone', 'seat_type', 'features'):
+        if field in d:
+            sets.append('%s=?' % field)
+            args.append(str(d.get(field) or '')[:60])
+    if not sets:
+        return jsonify({'ok': False, 'error': '没有要更新的字段'}), 400
+    args.append(sid)
+    db.execute('UPDATE seats SET %s WHERE id=?' % ', '.join(sets), tuple(args))
+    return jsonify({'ok': True, 'seat': dict(db.one('SELECT * FROM seats WHERE id=?', (sid,)))})
+
+
+@app.route('/api/admin/seats/<int:sid>', methods=['DELETE'])
+@login_required
+@role_required('admin')
+def api_admin_seat_delete(sid):
+    seat = db.one('SELECT * FROM seats WHERE id=?', (sid,))
+    if not seat:
+        return jsonify({'ok': False, 'error': '座位不存在'}), 404
+    live = db.one("SELECT id FROM reservations WHERE seat_id=? AND status IN ('booked','active') "
+                  "AND end_at > ? LIMIT 1", (sid, db.now()))
+    if live:
+        return jsonify({'ok': False, 'error': '这个座位还有未结束的预约'}), 400
+    db.execute('DELETE FROM seats WHERE id=?', (sid,))
+    return jsonify({'ok': True})
+
+
+@app.route('/api/admin/floors/<int:fid>/seats/bulk-delete', methods=['POST'])
+@login_required
+@role_required('admin')
+def api_admin_seat_bulk_delete(fid):
+    d = request.get_json(silent=True) or {}
+    ids = [int(i) for i in (d.get('ids') or []) if str(i).isdigit()]
+    if not ids:
+        return jsonify({'ok': False, 'error': '没有选中座位'}), 400
+    deleted, blocked = 0, []
+    for sid in ids:
+        seat = db.one('SELECT * FROM seats WHERE id=? AND floor_id=?', (sid, fid))
+        if not seat:
+            continue
+        live = db.one("SELECT id FROM reservations WHERE seat_id=? AND status IN ('booked','active') "
+                      "AND end_at > ? LIMIT 1", (sid, db.now()))
+        if live:
+            blocked.append(seat['code'])
+            continue
+        db.execute('DELETE FROM seats WHERE id=?', (sid,))
+        deleted += 1
+    return jsonify({'ok': True, 'deleted': deleted, 'blocked': blocked})
+
 
 @app.route('/api/floors')
 @login_required

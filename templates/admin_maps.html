@@ -1,36 +1,115 @@
 {% extends 'base.html' %}
 {% from 'base.html' import icon %}
 {% block title %}地图{% endblock %}
-{% block page_title %}地图 · 楼层底图{% endblock %}
-{% block eyebrow %}管理员 · 底图与座位坐标叠加{% endblock %}
+{% block page_title %}地图 · 底图与路网{% endblock %}
+{% block eyebrow %}管理员 · 在真实平面图上摆座位、编路网{% endblock %}
 {% block content %}
 <div class="map-admin">
   <section class="card">
-    <div class="card-head"><h3>楼层</h3><span class="small muted">先选楼层，再上传底图</span></div>
+    <div class="card-head"><h3>地点 / 楼层</h3><span class="small muted">按地点分组，可搜索</span></div>
     <div class="card-body">
+      <div class="floor-bar">
+        <input class="input" id="floorSearch" type="search" placeholder="搜索地点或楼层名…">
+        <button class="btn ghost sm" id="floorNewBtn" type="button">＋ 新建</button>
+      </div>
+      <form id="floorForm" class="floor-form" style="display:none">
+        <label class="small">地点<input class="input" id="fBuilding" list="buildingList" placeholder="如 图书馆" maxlength="30" required></label>
+        <datalist id="buildingList"></datalist>
+        <label class="small">楼层名<input class="input" id="fName" placeholder="如 2F 静学自习区" maxlength="30" required></label>
+        <label class="small">楼层号<input class="input" id="fNo" type="number" value="1" min="-2" max="99" style="width:70px"></label>
+        <div class="floor-form-actions">
+          <button class="btn primary sm" type="submit">创建</button>
+          <button class="btn ghost sm" type="button" id="floorFormCancel">取消</button>
+        </div>
+      </form>
       <div id="floorList" class="map-floor-list"><div class="skeleton" style="height:90px"></div></div>
     </div>
   </section>
 
   <section class="card">
     <div class="card-head">
-      <div><h3 id="mapTitle">选择楼层</h3><span class="sub" id="mapSub">上传后作为选座页底图，座位仍按坐标叠加</span></div>
+      <div><h3 id="mapTitle">选择楼层</h3><span class="sub" id="mapSub">底图、座位、路网共用同一张 960×620 画布</span></div>
       <span class="badge blue" id="mapBadge">未选择</span>
     </div>
     <div class="card-body">
-      <div class="map-preview" id="mapPreview">
-        <div class="empty"><div class="empty-icon">{{ icon('seat') }}</div><b>还没选楼层</b><span>左侧选一层，上传图书馆/教学楼平面图</span></div>
+      <div class="edit-toolbar">
+        <div class="seg" id="layerTabs">
+          <button type="button" class="chip active" data-layer="seat">座位</button>
+          <button type="button" class="chip" data-layer="net">路网</button>
+        </div>
+        <div class="seg" id="modeTabs">
+          <button type="button" class="chip active" data-mode="add">点空白新增</button>
+          <button type="button" class="chip" data-mode="edit">拖动 / 编辑</button>
+          <button type="button" class="chip" data-mode="move">整体拖路网</button>
+        </div>
+        <label class="small" id="zoneWrap">区域
+          <select class="input" id="editZone" style="width:auto">
+            <option>靠窗区</option><option>安静区</option><option>电源区</option><option>讨论区</option>
+          </select>
+        </label>
+        <label class="small"><input type="checkbox" id="snapGrid" checked> 吸附 10px</label>
+        <label class="small"><input type="checkbox" id="showPlan" checked> 显示底图</label>
+        <span class="edit-zoom">
+          <button type="button" class="btn ghost sm" id="zoomOut">−</button>
+          <b id="zoomPct">100%</b>
+          <button type="button" class="btn ghost sm" id="zoomIn">+</button>
+          <button type="button" class="btn ghost sm" id="zoomReset">适应</button>
+        </span>
       </div>
-      <div class="row wrap" style="margin-top:14px;gap:10px;align-items:center">
+
+      <div class="edit-canvas" id="editCanvas">
+        <svg id="editSvg" viewBox="0 0 960 620" preserveAspectRatio="xMidYMid meet">
+          <g id="viewport">
+            <rect x="0" y="0" width="960" height="620" fill="#ffffff"></rect>
+            <image id="editPlan" x="0" y="0" width="960" height="620" preserveAspectRatio="none"></image>
+            <g id="layerNet"></g>
+            <g id="layerSeats"></g>
+          </g>
+        </svg>
+        <div class="edit-empty" id="editEmpty">
+          <div class="empty"><div class="empty-icon">{{ icon('seat') }}</div>
+            <b>还没选楼层</b><span>左侧选一层，上传平面图后开始摆</span></div>
+        </div>
+      </div>
+
+      <div class="edit-inspector" id="editInspector" style="display:none"></div>
+
+      <div class="edit-actions">
         <form id="mapForm" class="row" style="gap:8px;align-items:center">
           <input class="input" type="file" id="mapFile" accept="image/png,image/jpeg,image/webp" required>
           <button class="btn primary sm" type="submit">上传底图</button>
         </form>
         <button class="btn ghost sm" id="mapDelete" type="button" style="display:none">删除底图</button>
       </div>
-      <div class="ai-panel" style="margin-top:14px">
-        参考智座的做法：底图只负责“看起来像真实楼层”，座位坐标和 A* 路网仍由数据库里的 <code>seats / nav_nodes / nav_edges</code> 决定。
-        上传前请把平面图裁成接近 960×620 的比例，座位标记会按原坐标叠加。
+
+      <div class="edit-actions">
+        <button class="btn primary sm" id="genImage" type="button">从底图生成路网</button>
+        <form id="dxfForm" class="row" style="gap:8px;align-items:center">
+          <input class="input" type="file" id="dxfFile" accept=".dxf" required>
+          <label class="small"><input type="checkbox" id="dxfSeats" checked> 同时写入座位候选</label>
+          <button class="btn soft sm" type="submit">DXF 生成</button>
+        </form>
+        <button class="btn ghost sm" id="netJoin" type="button">接上断开的部分</button>
+        <button class="btn ghost sm" id="netDiag" type="button">诊断路网</button>
+        <button class="btn ghost sm" id="netClear" type="button">清空路网</button>
+      </div>
+
+      <div class="edit-shift">
+        <span class="small muted">整体调整（座位 + 路网一起）</span>
+        <label class="small">缩放<input class="input" id="trScale" type="number" step="0.05" min="0.4" max="2.5" value="1" style="width:76px"></label>
+        <label class="small">X<input class="input" id="trDx" type="number" step="5" value="0" style="width:76px"></label>
+        <label class="small">Y<input class="input" id="trDy" type="number" step="5" value="0" style="width:76px"></label>
+        <label class="small"><input type="checkbox" id="trSeats" checked> 带上座位</label>
+        <button class="btn soft sm" id="trApply" type="button">应用</button>
+        <span class="small muted">方向键可 1px 微调</span>
+      </div>
+
+      <div class="edit-stat" id="netStat">—</div>
+      <div class="ai-panel" id="diagBox" style="display:none;margin-top:12px"></div>
+
+      <div class="ai-panel" style="margin-top:12px">
+        底图决定「看起来像不像真实楼层」，座位与路网坐标决定「能不能点、路线准不准」。
+        没有 CAD 图时用「从底图生成路网」；有 DXF 时优先用 DXF —— 它按图层区分墙 / 家具 / 房间名，比猜图准得多。
       </div>
     </div>
   </section>
@@ -38,69 +117,851 @@
 {% endblock %}
 {% block scripts %}
 <script>
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  let CW = 960, CH = 620;   // 当前楼层的画布尺寸（跟随底图比例）
   let floors = [], active = null;
+  let seats = [], nodes = [], edges = [];
+  let layer = 'seat', mode = 'add';
+  let selSeats = new Set(), selNodes = new Set(), selNode = null, pendingLink = null;
+  let view = { z: 1, x: 0, y: 0 };
+  let drag = null, panning = null, busy = false, shiftDrag = null;
+  let svgRect = null;                       // 缓存画布 boundingRect，避免每次移动都强制布局
+  let rafId = 0, pendingEv = null;          // 指针事件合帧
+  let netIndex = { nodes: {}, edges: [] };  // 节点/连线的 DOM 索引，拖动时局部更新
+  let collapsed = {};            // 地点折叠状态
+  let floorQuery = '';           // 楼层搜索词
+  let netStats = null;
+
   const esc = s => ZX.escapeHtml(s == null ? '' : String(s));
-
-  function renderList() {
-    const box = document.getElementById('floorList');
-    if (!floors.length) { box.innerHTML = '<div class="empty"><b>没有楼层</b><span>先运行 seed.py</span></div>'; return; }
-    box.innerHTML = floors.map(f => '<button class="map-floor-item ' + (active && active.id === f.id ? 'active' : '') + '" data-id="' + f.id + '">' +
-      '<span><b>' + esc(f.building) + ' · ' + esc(f.name) + '</b><small>' + (f.seat_count || 0) + ' 座 · ' + (f.nav_count || 0) + ' 个路网节点</small></span>' +
-      '<span class="badge ' + (f.plan_url ? 'green' : 'gray') + '">' + (f.plan_url ? '有底图' : '无底图') + '</span></button>').join('');
-    box.querySelectorAll('.map-floor-item').forEach(el => el.addEventListener('click', () => selectFloor(Number(el.dataset.id))));
-  }
-
-  function selectFloor(id) {
-    active = floors.find(f => f.id === id);
-    renderList();
-    document.getElementById('mapTitle').textContent = active ? active.building + ' · ' + active.name : '选择楼层';
-    document.getElementById('mapSub').textContent = active ? active.seat_count + ' 个座位 · ' + active.nav_count + ' 个路网节点' : '';
-    document.getElementById('mapBadge').textContent = active ? (active.plan_url ? '已上传' : '未上传') : '未选择';
-    document.getElementById('mapBadge').className = 'badge ' + (active && active.plan_url ? 'green' : 'gray');
-    const p = document.getElementById('mapPreview');
-    if (!active) { p.innerHTML = '<div class="empty"><b>还没选楼层</b></div>'; return; }
-    if (active.plan_url) {
-      p.innerHTML = '<img src="' + active.plan_url + '" alt="楼层底图" style="width:100%;max-height:460px;object-fit:contain;background:#fff;border-radius:12px">';
-    } else {
-      p.innerHTML = '<div class="empty"><div class="empty-icon">🗺️</div><b>这一层还没有底图</b><span>上传 PNG/JPG，选座页会把它垫在座位下面</span></div>';
+  /* ZX.api 只在 body 是对象时才补 Content-Type: application/json。
+     这里统一收口：字符串 body 先解析成对象再交给它，后端就不会收到空 body。 */
+  const api = (url, opts) => {
+    opts = opts || {};
+    if (typeof opts.body === 'string') {
+      try { opts.body = JSON.parse(opts.body); } catch (e) { delete opts.body; }
     }
-    document.getElementById('mapDelete').style.display = active.plan_url ? '' : 'none';
+    return ZX.api(url, opts);
+  };
+  const $ = id => document.getElementById(id);
+  const svgEl = () => $('editSvg');
+  const viewport = () => $('viewport');
+
+  /* ================= 楼层 ================= */
+  function renderList() {
+    const box = $('floorList');
+    if (!floors.length) { box.innerHTML = '<div class="empty"><b>没有楼层</b><span>点右上「＋ 新建」加点位</span></div>'; return; }
+
+    const q = floorQuery.trim().toLowerCase();
+    const hit = f => !q || (f.building || '').toLowerCase().includes(q) || (f.name || '').toLowerCase().includes(q);
+    const shown = floors.filter(hit);
+
+    // 按地点分组
+    const groups = {};
+    shown.forEach(f => { (groups[f.building] = groups[f.building] || []).push(f); });
+    const names = Object.keys(groups).sort((a, b) => a.localeCompare(b, 'zh'));
+
+    let html = '';
+    names.forEach(b => {
+      const list = groups[b].sort((x, y) => (x.floor_no || 0) - (y.floor_no || 0));
+      const isCollapsed = collapsed[b] && !q;         // 搜索时强制展开
+      html += '<div class="floor-group">' +
+        '<button class="floor-group-head" data-building="' + esc(b) + '">' +
+        '<span class="chev">' + (isCollapsed ? '▸' : '▾') + '</span>' +
+        '<b>' + esc(b) + '</b><small>' + list.length + ' 层</small></button>';
+      if (!isCollapsed) {
+        html += list.map(f =>
+          '<div class="floor-row ' + (active && active.id === f.id ? 'active' : '') + '" data-id="' + f.id + '">' +
+          '<button class="floor-pick" data-id="' + f.id + '">' +
+          '<span><b>' + esc(f.name) + '</b><small>' + (f.seat_count || 0) + ' 座 · ' + (f.nav_count || 0) + ' 节点</small></span>' +
+          '<span class="badge ' + (f.plan_url ? 'green' : 'gray') + '">' + (f.plan_url ? '有底图' : '无底图') + '</span></button>' +
+          '<span class="floor-ops">' +
+          '<button class="mini" data-act="rename" data-id="' + f.id + '" title="改名">改名</button>' +
+          '<button class="mini danger" data-act="del" data-id="' + f.id + '" title="删除楼层">删除</button>' +
+          '</span></div>').join('');
+      }
+      html += '</div>';
+    });
+    box.innerHTML = html;
+
+    box.querySelectorAll('.floor-group-head').forEach(el => el.addEventListener('click', () => {
+      const b = el.dataset.building;
+      collapsed[b] = !collapsed[b];
+      renderList();
+    }));
+    box.querySelectorAll('.floor-pick').forEach(el => el.addEventListener('click', () => selectFloor(Number(el.dataset.id))));
+    box.querySelectorAll('[data-act="rename"]').forEach(el => el.addEventListener('click', ev => {
+      ev.stopPropagation();
+      renameFloor(Number(el.dataset.id));
+    }));
+    box.querySelectorAll('[data-act="del"]').forEach(el => el.addEventListener('click', ev => {
+      ev.stopPropagation();
+      deleteFloor(Number(el.dataset.id));
+    }));
+
+    // 地点下拉候选
+    const dl = $('buildingList');
+    if (dl) dl.innerHTML = Array.from(new Set(floors.map(f => f.building))).map(b => '<option value="' + esc(b) + '">').join('');
   }
+
+  async function renameFloor(id) {
+    const f = floors.find(x => x.id === id);
+    if (!f) return;
+    const building = prompt('地点名（同一地点的楼层会分在一组）', f.building);
+    if (building === null) return;
+    const name = prompt('楼层名', f.name);
+    if (name === null) return;
+    try {
+      await api('/api/admin/floors/' + id, {
+        method: 'PUT', body: { building: building.trim(), name: name.trim(), floor_no: f.floor_no }
+      });
+      await loadFloors();
+      ZX.toast('已改名');
+    } catch (e) { ZX.toast(e.message, 'err'); }
+  }
+
+  async function deleteFloor(id) {
+    const f = floors.find(x => x.id === id);
+    if (!f) return;
+    if (!confirm('删除「' + f.building + ' · ' + f.name + '」？\n（有座位时会被拒绝；路网和底图会一起删）')) return;
+    try {
+      await api('/api/admin/floors/' + id, { method: 'DELETE' });
+      if (active && active.id === id) { active = null; }
+      await loadFloors();
+      ZX.toast('楼层已删除');
+    } catch (e) { ZX.toast(e.message, 'err'); }
+  }
+
+  function setBadge() {
+    const b = $('mapBadge');
+    b.textContent = active ? (active.plan_url ? '已上传' : '未上传') : '未选择';
+    b.className = 'badge ' + (active && active.plan_url ? 'green' : 'gray');
+  }
+
+  async function selectFloor(id) {
+    active = floors.find(f => f.id === id) || null;
+    selSeats.clear(); selNodes.clear(); selNode = null; pendingLink = null;
+    renderList(); setBadge();
+    $('mapTitle').textContent = active ? active.building + ' · ' + active.name : '选择楼层';
+    $('mapSub').textContent = active
+      ? (active.seat_count || 0) + ' 座 · ' + (active.nav_count || 0) + ' 个路网节点'
+      : '底图、座位、路网共用同一张 960×620 画布';
+    $('mapDelete').style.display = active && active.plan_url ? '' : 'none';
+    if (!active) { $('editEmpty').style.display = ''; return; }
+    $('editEmpty').style.display = 'none';
+
+    // 画布跟随这一层的底图比例（后端上传时已算好，至少 960×620）
+    CW = Math.round(Number(active.canvas_w || 960));
+    CH = Math.round(Number(active.canvas_h || 620));
+    const svg = svgEl();
+    svg.setAttribute('viewBox', '0 0 ' + CW + ' ' + CH);
+    const bg = svg.querySelector('#viewport > rect');
+    if (bg) { bg.setAttribute('width', CW); bg.setAttribute('height', CH); }
+    const img = $('editPlan');
+    img.setAttribute('width', CW);
+    img.setAttribute('height', CH);
+    img.setAttribute('href', active.plan_url || '');
+    img.style.display = active.plan_url && $('showPlan').checked ? '' : 'none';
+    $('mapSub').textContent = (active.seat_count || 0) + ' 座 · ' + (active.nav_count || 0) +
+      ' 个路网节点 · 画布 ' + CW + '×' + CH;
+    view = { z: 1, x: 0, y: 0 };
+    applyView();
+    await Promise.all([loadSeats(), loadNetwork()]);
+    drawAll(); renderInspector(); renderStat();
+  }
+
+  async function loadSeats() {
+    if (!active) return;
+    const r = await api('/api/seats?floor_id=' + active.id);
+    seats = r.seats || [];
+    const zoneSel = $('editZone');
+    Array.from(new Set(seats.map(s => s.zone).filter(Boolean))).forEach(z => {
+      if (!Array.from(zoneSel.options).some(o => o.value === z)) zoneSel.add(new Option(z, z));
+    });
+  }
+
+  async function loadNetwork() {
+    if (!active) return;
+    const r = await api('/api/admin/floors/' + active.id + '/network');
+    nodes = r.nodes || [];
+    edges = r.edges || [];
+    netStats = r.stats || null;
+    renderStat();
+  }
+
+  function renderStat(st) {
+    const st2 = st || netStats || { nodes: nodes.length, edges: edges.length, connected_ratio: 0, components: 0 };
+    $('netStat').innerHTML = '座位 <b>' + seats.length + '</b> · 节点 <b>' + (st2.nodes || 0) + '</b> · 连线 <b>' +
+      (st2.edges || 0) + '</b> · 连通 <b>' + (st2.connected_ratio || 0) + '%</b>' +
+      ((st2.components || 0) > 1 ? ' · <span style="color:#b03a2e">分成 ' + st2.components + ' 块</span>' : '');
+  }
+
+  /* ================= 画 ================= */
+  function applyView() {
+    viewport().setAttribute('transform', 'translate(' + view.x + ',' + view.y + ') scale(' + view.z + ')');
+    $('zoomPct').textContent = Math.round(view.z * 100) + '%';
+  }
+
+  function seatClass(s) {
+    if (selSeats.has(s.id)) return 'seat selected';
+    const st = s.live_status || s.status || 'free';
+    const map = { free: 'free', booked: 'booked', using: 'using', occupied: 'occupied', maintenance: 'maintenance' };
+    return 'seat ' + (map[st] || 'free') + (s.mine ? ' mine' : '');
+  }
+
+  function drawSeats() {
+    const g = $('layerSeats');
+    g.innerHTML = '';
+    g.style.opacity = layer === 'net' ? '.4' : '1';
+    seats.forEach(s => {
+      const el = document.createElementNS(SVGNS, 'g');
+      el.setAttribute('class', seatClass(s));
+      el.dataset.kind = 'seat';
+      el.dataset.id = s.id;
+      const r = document.createElementNS(SVGNS, 'rect');
+      r.setAttribute('x', s.x - 15); r.setAttribute('y', s.y - 12);
+      r.setAttribute('width', 30); r.setAttribute('height', 24); r.setAttribute('rx', 5);
+      const t = document.createElementNS(SVGNS, 'text');
+      t.setAttribute('x', s.x); t.setAttribute('y', Number(s.y) + 3);
+      t.textContent = s.code;
+      el.appendChild(r); el.appendChild(t);
+      g.appendChild(el);
+    });
+  }
+
+  function nodePos(code) {
+    const n = nodes.find(x => x.code === code);
+    return n ? { x: Number(n.x), y: Number(n.y) } : null;
+  }
+
+  function drawNet() {
+    const g = $('layerNet');
+    g.removeAttribute('transform');   // 拖动预览残留的位移清掉
+    g.innerHTML = '';
+    netIndex = { nodes: {}, edges: [] };
+    edges.forEach(e => {
+      const a = nodePos(e.from_node), b = nodePos(e.to_node);
+      if (!a || !b) return;
+      const ln = document.createElementNS(SVGNS, 'line');
+      ln.setAttribute('x1', a.x); ln.setAttribute('y1', a.y);
+      ln.setAttribute('x2', b.x); ln.setAttribute('y2', b.y);
+      ln.setAttribute('class', 'net-edge');
+      g.appendChild(ln);
+      netIndex.edges.push({ el: ln, a: e.from_node, b: e.to_node });
+    });
+    nodes.forEach(n => {
+      const el = document.createElementNS(SVGNS, 'g');
+      el.setAttribute('class', (n.kind === 'entry' ? 'net-entry' : 'net-node') +
+        ((n.id === selNode || selNodes.has(n.id)) ? ' selected' : '') + (pendingLink === n.code ? ' pending' : ''));
+      el.dataset.kind = 'node';
+      el.dataset.id = n.id;
+      el.dataset.code = n.code;
+      const c = document.createElementNS(SVGNS, 'circle');
+      c.setAttribute('cx', n.x); c.setAttribute('cy', n.y);
+      c.setAttribute('r', n.kind === 'entry' ? 8 : 5.5);
+      el.appendChild(c);
+      const t = document.createElementNS(SVGNS, 'text');
+      t.setAttribute('x', Number(n.x)); t.setAttribute('y', Number(n.y) - 10);
+      t.textContent = n.code;
+      el.appendChild(t);
+      g.appendChild(el);
+      netIndex.nodes[n.id] = { g: el, c: c, t: t };
+    });
+  }
+
+  /* 拖一个节点时只改它和它相连的两条线，不重建整层（几百个节点重建会明显卡） */
+  function moveNodeVisual(n) {
+    const ref = netIndex.nodes[n.id];
+    if (!ref) return;
+    ref.c.setAttribute('cx', n.x);
+    ref.c.setAttribute('cy', n.y);
+    ref.t.setAttribute('x', n.x);
+    ref.t.setAttribute('y', Number(n.y) - 10);
+    netIndex.edges.forEach(e => {
+      if (e.a === n.code) {
+        e.el.setAttribute('x1', n.x);
+        e.el.setAttribute('y1', n.y);
+      } else if (e.b === n.code) {
+        e.el.setAttribute('x2', n.x);
+        e.el.setAttribute('y2', n.y);
+      }
+    });
+  }
+
+  function drawAll() {
+    $('layerNet').style.display = layer === 'net' ? '' : 'none';
+    $('layerSeats').style.display = layer === 'seat' ? '' : '';
+    drawSeats(); drawNet();
+  }
+
+  /* ================= 坐标 ================= */
+  /* 屏幕坐标 -> 画布坐标。
+     不用 getScreenCTM：无头/无 GPU 时它可能给出退化矩阵，换算出来是 NaN，
+     存库就变成 null。按 bounding rect 等比换算始终可靠，和滚轮缩放同一套数学。 */
+  function refreshRect() { svgRect = svgEl().getBoundingClientRect(); }
+  function getRect() { return svgRect || (refreshRect(), svgRect); }
+  window.addEventListener('resize', refreshRect);
+  window.addEventListener('scroll', refreshRect, { passive: true });
+
+  function toUser(ev) {
+    const rect = getRect();
+    const ux = (ev.clientX - rect.left) / rect.width * CW;
+    const uy = (ev.clientY - rect.top) / rect.height * CH;
+    return { x: (ux - view.x) / view.z, y: (uy - view.y) / view.z };
+  }
+  function snap(v) { return $('snapGrid').checked ? Math.round(v / 10) * 10 : Math.round(v); }
+
+  /* ================= 座位 / 节点 增删改 ================= */
+  async function createSeat(x, y) {
+    if (!isFinite(x) || !isFinite(y)) return ZX.toast('坐标异常，稍后再试', 'err');
+    if (busy) return; busy = true;
+    try {
+      const r = await api('/api/admin/floors/' + active.id + '/seats', {
+        method: 'POST', body: JSON.stringify({ x, y, zone: $('editZone').value })
+      });
+      seats.push(r.seat); selSeats = new Set([r.seat.id]);
+      drawAll(); renderInspector(); renderList(); renderStat();
+      ZX.toast('已加座位 ' + r.seat.code);
+    } catch (e) { ZX.toast(e.message, 'err'); }
+    busy = false;
+  }
+
+  async function patchSeat(id, body) {
+    try {
+      const r = await api('/api/admin/seats/' + id, { method: 'PUT', body: JSON.stringify(body) });
+      const i = seats.findIndex(s => s.id === id);
+      if (i >= 0) seats[i] = Object.assign(seats[i], r.seat);
+      drawSeats();
+      return r.seat;
+    } catch (e) { ZX.toast(e.message, 'err'); return null; }
+  }
+
+  async function createNode(x, y) {
+    if (!isFinite(x) || !isFinite(y)) return ZX.toast('坐标异常，稍后再试', 'err');
+    if (busy) return; busy = true;
+    try {
+      const r = await api('/api/admin/floors/' + active.id + '/nodes', {
+        method: 'POST', body: JSON.stringify({ x, y })
+      });
+      nodes.push(r.node); selNode = r.node.id;
+      drawNet(); renderInspector(); renderList();
+      $('netStat').innerHTML = '座位 <b>' + seats.length + '</b> · 节点 <b>' + nodes.length + '</b> · 连线 <b>' + edges.length + '</b>';
+      ZX.toast('已加节点 ' + r.node.code);
+    } catch (e) { ZX.toast(e.message, 'err'); }
+    busy = false;
+  }
+
+  async function patchNode(id, body) {
+    try {
+      const r = await api('/api/admin/nodes/' + id, { method: 'PUT', body: JSON.stringify(body) });
+      const i = nodes.findIndex(n => n.id === id);
+      if (i >= 0) nodes[i] = Object.assign(nodes[i], r.node);
+      drawNet();
+      return r.node;
+    } catch (e) { ZX.toast(e.message, 'err'); return null; }
+  }
+
+  async function linkNodes(a, b) {
+    try {
+      await api('/api/admin/floors/' + active.id + '/edges', {
+        method: 'POST', body: JSON.stringify({ from_node: a, to_node: b })
+      });
+      await loadNetwork(); drawNet(); renderInspector();
+      ZX.toast('已连线 ' + a + ' → ' + b);
+    } catch (e) { ZX.toast(e.message, 'err'); }
+  }
+
+  /* ================= 属性面板 ================= */
+  function renderInspector() {
+    const box = $('editInspector');
+    if (layer === 'seat') {
+      if (selSeats.size === 0) { box.style.display = 'none'; return; }
+      box.style.display = '';
+      if (selSeats.size > 1) {
+        box.innerHTML = '<div class="small">已选 <b>' + selSeats.size + '</b> 个座位</div>' +
+          '<button class="btn ghost sm" id="bulkDelete">批量删除</button>';
+        $('bulkDelete').addEventListener('click', bulkDeleteSeats);
+        return;
+      }
+      const s = seats.find(x => x.id === [...selSeats][0]);
+      if (!s) { box.style.display = 'none'; return; }
+      box.innerHTML =
+        '<label class="small">座位号<input class="input" id="insCode" maxlength="12" value="' + esc(s.code) + '"></label>' +
+        '<label class="small">区域<input class="input" id="insZone" maxlength="20" value="' + esc(s.zone) + '"></label>' +
+        '<label class="small">类型<select class="input" id="insType">' +
+        [['normal', '普通'], ['window', '靠窗'], ['power', '有电源'], ['quiet', '静音'], ['group', '讨论']]
+          .map(([v, t]) => '<option value="' + v + '"' + ((s.seat_type || '') === v ? ' selected' : '') + '>' + t + '</option>').join('') +
+        '</select></label>' +
+        '<label class="small">标签<input class="input" id="insFeatures" maxlength="60" value="' + esc(s.features || '') + '"></label>' +
+        '<span class="small muted">x ' + Math.round(s.x) + ' · y ' + Math.round(s.y) + '</span>' +
+        '<button class="btn ghost sm" id="insDelete">删除座位</button>';
+      $('insCode').addEventListener('change', async e => { const r = await patchSeat(s.id, { code: e.target.value.trim() }); if (r) { renderInspector(); renderList(); } });
+      $('insZone').addEventListener('change', async e => { const r = await patchSeat(s.id, { zone: e.target.value.trim() }); if (r) renderInspector(); });
+      $('insType').addEventListener('change', e => patchSeat(s.id, { seat_type: e.target.value }));
+      $('insFeatures').addEventListener('change', e => patchSeat(s.id, { features: e.target.value.trim() }));
+      $('insDelete').addEventListener('click', async () => {
+        if (!confirm('删除座位 ' + s.code + '？')) return;
+        try {
+          await api('/api/admin/seats/' + s.id, { method: 'DELETE' });
+          seats = seats.filter(x => x.id !== s.id); selSeats.clear();
+          drawSeats(); renderInspector(); renderList(); renderStat();
+          ZX.toast('座位已删除');
+        } catch (e) { ZX.toast(e.message, 'err'); }
+      });
+      return;
+    }
+    if (selNodes.size > 1) {
+      box.style.display = '';
+      box.innerHTML = '<div class="small">已选 <b>' + selNodes.size + '</b> 个节点</div>' +
+        '<button class="btn ghost sm" id="bulkDelNodes">批量删除节点</button>' +
+        '<button class="btn ghost sm" id="clearNodeSel">取消选择</button>';
+      $('bulkDelNodes').addEventListener('click', bulkDeleteNodes);
+      $('clearNodeSel').addEventListener('click', () => { selNodes.clear(); drawNet(); renderInspector(); });
+      return;
+    }
+    const n = nodes.find(x => x.id === selNode);
+    if (!n) { box.style.display = 'none'; return; }
+    box.style.display = '';
+    box.innerHTML =
+      '<label class="small">节点号<input class="input" id="insNodeCode" maxlength="12" value="' + esc(n.code) + '"></label>' +
+      '<label class="small">类型<select class="input" id="insNodeKind">' +
+      [['corridor', '走廊'], ['entry', '入口'], ['junction', '路口'], ['stairs', '楼梯']]
+        .map(([v, t]) => '<option value="' + v + '"' + ((n.kind || 'corridor') === v ? ' selected' : '') + '>' + t + '</option>').join('') +
+      '</select></label>' +
+      '<span class="small muted">x ' + Math.round(n.x) + ' · y ' + Math.round(n.y) + '</span>' +
+      '<button class="btn soft sm" id="insLink">' + (pendingLink === n.code ? '取消连线' : '从这里连线') + '</button>' +
+      '<button class="btn ghost sm" id="insDelNode">删除节点</button>';
+    $('insNodeCode').addEventListener('change', async e => {
+      const r = await patchNode(n.id, { code: e.target.value.trim() });
+      if (r) { await loadNetwork(); drawNet(); renderInspector(); }
+    });
+    $('insNodeKind').addEventListener('change', e => patchNode(n.id, { kind: e.target.value }));
+    $('insLink').addEventListener('click', () => {
+      pendingLink = pendingLink === n.code ? null : n.code;
+      drawNet(); renderInspector();
+      ZX.toast(pendingLink ? '再点另一个节点连过去' : '已取消连线');
+    });
+    $('insDelNode').addEventListener('click', async () => {
+      if (!confirm('删除节点 ' + n.code + ' 及它的所有连线？')) return;
+      try {
+        await api('/api/admin/nodes/' + n.id, { method: 'DELETE' });
+        nodes = nodes.filter(x => x.id !== n.id); selNode = null; pendingLink = null;
+        await loadNetwork(); drawNet(); renderInspector(); renderList();
+        ZX.toast('节点已删除');
+      } catch (e) { ZX.toast(e.message, 'err'); }
+    });
+  }
+
+  async function bulkDeleteNodes() {
+    const ids = [...selNodes];
+    if (!ids.length || !confirm('删除选中的 ' + ids.length + ' 个节点及它们的连线？')) return;
+    try {
+      const r = await api('/api/admin/nodes/bulk-delete', { method: 'POST', body: { ids } });
+      ZX.toast('已删除 ' + r.deleted + ' 个节点');
+      selNodes.clear(); selNode = null;
+      await loadNetwork(); drawNet(); renderInspector(); renderList();
+    } catch (e) { ZX.toast(e.message, 'err'); }
+  }
+
+  async function bulkDeleteSeats() {
+    const ids = [...selSeats];
+    if (!ids.length || !confirm('删除选中的 ' + ids.length + ' 个座位？')) return;
+    try {
+      const r = await api('/api/admin/floors/' + active.id + '/seats/bulk-delete', {
+        method: 'POST', body: JSON.stringify({ ids })
+      });
+      ZX.toast('已删除 ' + r.deleted + ' 个' + (r.blocked.length ? '，' + r.blocked.length + ' 个有预约没删' : ''));
+      selSeats.clear();
+      await loadSeats(); drawSeats(); renderInspector(); renderList(); renderStat();
+    } catch (e) { ZX.toast(e.message, 'err'); }
+  }
+
+  /* ================= 交互 ================= */
+  const canvas = $('editCanvas');
+
+  /* 拖拽时把指针捕获到画布上：鼠标移出画布再松手也能收到 pointerup，
+     否则这次拖动不会保存，下一次重绘就"弹回原位"了。 */
+  function capture(ev) {
+    try { canvas.setPointerCapture(ev.pointerId); } catch (e) {}
+  }
+
+  canvas.addEventListener('wheel', ev => {
+    if (!active) return;
+    ev.preventDefault();
+    const rect = svgEl().getBoundingClientRect();
+    const k = view.z < 1 ? 1.25 : 1.2;
+    const nz = Math.max(0.4, Math.min(4, ev.deltaY < 0 ? view.z * k : view.z / k));
+    // 以鼠标位置为锚点缩放
+    const ux = (ev.clientX - rect.left) / rect.width * CW;
+    const uy = (ev.clientY - rect.top) / rect.height * CH;
+    view.x = ux - (ux - view.x) * (nz / view.z);
+    view.y = uy - (uy - view.y) * (nz / view.z);
+    view.z = nz;
+    applyView();
+  }, { passive: false });
+
+  canvas.addEventListener('pointerdown', ev => {
+    if (!active) return;
+    const target = ev.target.closest('[data-kind]');
+    const p = toUser(ev);
+
+    // 整体拖动：只挪路网（自动生成常常整体偏一点，座位是对的），松手才写库
+    if (mode === 'move' && !target && ev.button === 0) {
+      refreshRect();
+      shiftDrag = { sx: ev.clientX, sy: ev.clientY, dx: 0, dy: 0 };
+      canvas.style.cursor = 'grabbing';
+      $('layerNet').style.transition = 'none';
+      capture(ev);
+      ev.preventDefault();
+      return;
+    }
+    refreshRect();
+    if (target) {
+      const kind = target.dataset.kind;
+      const id = Number(target.dataset.id);
+      if (kind === 'seat') {
+        const s = seats.find(x => x.id === id);
+        if (!s) return;
+        if (!selSeats.has(id)) {
+          if (!ev.shiftKey) selSeats.clear();
+          selSeats.add(id);
+        }
+        drag = { kind: 'seat', id, dx: s.x - p.x, dy: s.y - p.y, sx: p.x, sy: p.y, moved: false };
+        drawSeats(); renderInspector();
+      } else {
+        const n = nodes.find(x => x.id === id);
+        if (!n) return;
+        drag = { kind: 'node', id, code: n.code, dx: Number(n.x) - p.x, dy: Number(n.y) - p.y,
+                 sx: p.x, sy: p.y, moved: false, shift: ev.shiftKey };
+      }
+      capture(ev);
+      ev.preventDefault();
+      return;
+    }
+    // 空白：中键/右键或按住空格 = 平移；左键按模式处理
+    if (ev.button === 1 || ev.button === 2 || ev.altKey) {
+      panning = { x: ev.clientX, y: ev.clientY, vx: view.x, vy: view.y };
+      capture(ev);
+      ev.preventDefault();
+      return;
+    }
+    if (mode === 'add') {
+      if (layer === 'seat') createSeat(snap(p.x), snap(p.y));
+      else createNode(snap(p.x), snap(p.y));
+    } else {
+      selSeats.clear(); selNode = null; pendingLink = null;
+      drawAll(); renderInspector();
+      panning = { x: ev.clientX, y: ev.clientY, vx: view.x, vy: view.y, moved: false };
+    }
+  });
+
+  canvas.addEventListener('pointermove', ev => {
+    pendingEv = ev;
+    if (!rafId) rafId = requestAnimationFrame(flushMove);
+  });
+
+  function flushMove() {
+    rafId = 0;
+    const ev = pendingEv;
+    pendingEv = null;
+    if (!ev) return;
+
+    if (shiftDrag) {
+      const rect = getRect();
+      shiftDrag.dx = (ev.clientX - shiftDrag.sx) / rect.width * CW;
+      shiftDrag.dy = (ev.clientY - shiftDrag.sy) / rect.height * CH;
+      // 只平移路网图层：座位和底图原地不动
+      $('layerNet').setAttribute('transform',
+        'translate(' + shiftDrag.dx + ',' + shiftDrag.dy + ')');
+      return;
+    }
+    if (panning) {
+      const rect = getRect();
+      view.x = panning.vx + (ev.clientX - panning.x) / rect.width * CW;
+      view.y = panning.vy + (ev.clientY - panning.y) / rect.height * CH;
+      panning.moved = true;
+      applyView();
+      return;
+    }
+    if (!drag) return;
+    const p = toUser(ev);
+    if (Math.abs(p.x - drag.sx) > 2 || Math.abs(p.y - drag.sy) > 2) drag.moved = true;
+    if (!drag.moved) return;
+    const nx = snap(p.x + drag.dx), ny = snap(p.y + drag.dy);
+    if (drag.kind === 'seat') {
+      const s = seats.find(x => x.id === drag.id);
+      if (!s) return;
+      s.x = nx; s.y = ny;
+      const el = document.querySelector('#layerSeats .seat[data-id="' + s.id + '"]');
+      if (el) {
+        el.querySelector('rect').setAttribute('x', nx - 15);
+        el.querySelector('rect').setAttribute('y', ny - 12);
+        const t = el.querySelector('text');
+        t.setAttribute('x', nx); t.setAttribute('y', ny + 3);
+      }
+    } else {
+      const n = nodes.find(x => x.id === drag.id);
+      if (!n) return;
+      n.x = nx; n.y = ny;
+      moveNodeVisual(n);
+    }
+  }
+
+  async function endPointer() {
+    if (shiftDrag) {
+      const d = shiftDrag;
+      shiftDrag = null;
+      canvas.style.cursor = '';
+      if (Math.abs(d.dx) < 1 && Math.abs(d.dy) < 1) { drawNet(); return; }
+      // 先把位移落到本地数据上（视觉不跳），再提交；失败按快照回滚
+      const snapshot = nodes.map(n => ({ id: n.id, x: n.x, y: n.y }));
+      nodes.forEach(n => { n.x = Math.round(n.x + d.dx); n.y = Math.round(n.y + d.dy); });
+      $('layerNet').removeAttribute('transform');
+      drawNet();
+      try {
+        const r = await api('/api/admin/floors/' + active.id + '/transform', {
+          method: 'POST',
+          body: { scale: 1, dx: Math.round(d.dx), dy: Math.round(d.dy), with_seats: false }
+        });
+        ZX.toast('路网挪了 ' + Math.round(d.dx) + ', ' + Math.round(d.dy) +
+          '（' + r.moved.nodes + ' 个节点，座位没动）' + ((r.moved && r.moved.clamped) ? ' · 已贴边收住' : ''));
+        await loadNetwork(); drawNet(); renderStat();
+      } catch (e) {
+        snapshot.forEach(sv => {
+          const n = nodes.find(x => x.id === sv.id);
+          if (n) { n.x = sv.x; n.y = sv.y; }
+        });
+        drawNet();
+        ZX.toast(e.message || '保存失败，已回滚', 'err');
+      }
+      return;
+    }
+    if (panning) { panning = null; return; }
+    if (!drag) return;
+    const d = drag; drag = null;
+    if (d.kind === 'seat') {
+      const s = seats.find(x => x.id === d.id);
+      if (!s) return;
+      if (d.moved) await patchSeat(s.id, { x: s.x, y: s.y });
+      renderInspector();
+      return;
+    }
+    const n = nodes.find(x => x.id === d.id);
+    if (!n) return;
+    if (!d.moved) {
+      if (pendingLink && pendingLink !== n.code) {
+        const from = pendingLink; pendingLink = null;
+        await linkNodes(from, n.code);
+        return;
+      }
+      if (d.shift) {
+        selNodes.has(n.id) ? selNodes.delete(n.id) : selNodes.add(n.id);
+        selNode = selNodes.size === 1 ? [...selNodes][0] : null;
+      } else {
+        selNodes.clear(); selNode = n.id;
+      }
+      drawNet(); renderInspector();
+      return;
+    }
+    await patchNode(n.id, { x: n.x, y: n.y });
+    selNode = n.id; drawNet(); renderInspector(); loadNetwork();
+  }
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+  canvas.addEventListener('lostpointercapture', () => { if (shiftDrag || drag || panning) endPointer(); });
+  // 兜底：指针被浏览器抢走（切窗口、出界）时也要把这次拖动结算掉
+  window.addEventListener('pointerup', () => { if (shiftDrag || drag || panning) endPointer();
+    try { canvas.releasePointerCapture && canvas.releasePointerCapture(0); } catch (e) {} });
+  canvas.addEventListener('contextmenu', ev => ev.preventDefault());
+
+  /* ================= 工具条 ================= */
+  $('layerTabs').addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-layer]');
+    if (!b) return;
+    layer = b.dataset.layer;
+    document.querySelectorAll('#layerTabs .chip').forEach(c => c.classList.toggle('active', c === b));
+    $('zoneWrap').style.display = layer === 'seat' ? '' : 'none';
+    selSeats.clear(); selNodes.clear(); selNode = null; pendingLink = null;
+    drawAll(); renderInspector(); renderStat();
+  });
+
+  $('modeTabs').addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-mode]');
+    if (!b) return;
+    mode = b.dataset.mode;
+    document.querySelectorAll('#modeTabs .chip').forEach(c => c.classList.toggle('active', c === b));
+    if (mode === 'move') ZX.toast('整体拖路网：按住图面拖，只挪路网，座位不动，松手保存');
+  });
+
+  $('showPlan').addEventListener('change', ev => {
+    $('editPlan').style.display = ev.target.checked && active && active.plan_url ? '' : 'none';
+  });
+
+  $('zoomIn').addEventListener('click', () => { view.z = Math.min(4, view.z * 1.2); applyView(); });
+  $('zoomOut').addEventListener('click', () => { view.z = Math.max(0.4, view.z / 1.2); applyView(); });
+  $('zoomReset').addEventListener('click', () => { view = { z: 1, x: 0, y: 0 }; applyView(); });
+
+  /* 方向键 1px 微调（整体平移用） */
+  document.addEventListener('keydown', ev => {
+    if (!active || ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+    const map = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    const d = map[ev.key];
+    if (!d) return;
+    ev.preventDefault();
+    $('trDx').value = Number($('trDx').value || 0) + d[0] * (ev.shiftKey ? 10 : 1);
+    $('trDy').value = Number($('trDy').value || 0) + d[1] * (ev.shiftKey ? 10 : 1);
+  });
+
+  /* ================= 底图 / 生成 / 诊断 ================= */
+  $('floorSearch').addEventListener('input', ev => { floorQuery = ev.target.value; renderList(); });
+  $('floorNewBtn').addEventListener('click', () => {
+    const f = $('floorForm');
+    f.style.display = f.style.display === 'none' ? '' : 'none';
+    if (f.style.display === '') $('fBuilding').focus();
+  });
+  $('floorFormCancel').addEventListener('click', () => { $('floorForm').style.display = 'none'; });
+  $('floorForm').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const body = {
+      building: $('fBuilding').value.trim(),
+      name: $('fName').value.trim(),
+      floor_no: Number($('fNo').value || 1)
+    };
+    if (!body.building || !body.name) return ZX.toast('地点和楼层名都要填', 'err');
+    try {
+      const r = await api('/api/admin/floors', { method: 'POST', body });
+      $('fName').value = '';
+      $('floorForm').style.display = 'none';
+      await loadFloors();
+      await selectFloor(r.floor.id);
+      ZX.toast('已创建「' + r.floor.building + ' · ' + r.floor.name + '」');
+    } catch (e) { ZX.toast(e.message, 'err'); }
+  });
 
   async function loadFloors() {
-    const r = await ZX.api('/api/floors');
+    const r = await api('/api/floors');
     floors = r.floors || [];
     if (!active && floors.length) active = floors[0];
-    renderList(); if (active) selectFloor(active.id);
+    renderList();
+    if (active) await selectFloor(active.id);
   }
 
-  document.getElementById('mapForm').addEventListener('submit', async e => {
+  $('mapForm').addEventListener('submit', async e => {
     e.preventDefault();
     if (!active) return ZX.toast('先选楼层', 'err');
-    const file = document.getElementById('mapFile').files[0];
+    const file = $('mapFile').files[0];
     if (!file) return ZX.toast('先选图片', 'err');
     const fd = new FormData(); fd.append('file', file);
     const res = await fetch('/api/admin/floors/' + active.id + '/plan', { method: 'POST', body: fd });
     const data = await res.json().catch(() => ({}));
     if (!data.ok) return ZX.toast(data.error || '上传失败', 'err');
     ZX.toast('底图已保存');
-    document.getElementById('mapFile').value = '';
-    await loadFloors();
-    active = floors.find(f => f.id === active.id) || active;
-    selectFloor(active.id);
+    $('mapFile').value = '';
+    const keep = active.id;
+    await loadFloors(); await selectFloor(keep);
   });
 
-  document.getElementById('mapDelete').addEventListener('click', async () => {
-    if (!active || !confirm('删除这一层的底图？座位和路网不会删除。')) return;
+  $('mapDelete').addEventListener('click', async () => {
+    if (!active || !confirm('删除这一层的底图？座位和路网不会删。')) return;
     try {
-      await ZX.api('/api/admin/floors/' + active.id + '/plan', { method: 'DELETE' });
+      await api('/api/admin/floors/' + active.id + '/plan', { method: 'DELETE' });
       ZX.toast('底图已删除');
-      await loadFloors();
-      active = floors.find(f => f.id === active.id) || active;
-      selectFloor(active.id);
+      const keep = active.id;
+      await loadFloors(); await selectFloor(keep);
     } catch (e) { ZX.toast(e.message, 'err'); }
   });
 
+  $('genImage').addEventListener('click', async () => {
+    if (!active) return;
+    if (!active.plan_url) return ZX.toast('先上传底图再生成', 'err');
+    if (!confirm('用底图重新生成整层路网？现有节点会被覆盖（座位不动）。')) return;
+    ZX.toast('正在识别墙线…');
+    try {
+      const r = await api('/api/admin/floors/' + active.id + '/network/generate', { method: 'POST', body: '{}' });
+      ZX.toast('生成 ' + r.nodes + ' 节点 / ' + r.edges + ' 连线' + (r.joined ? '，自动接上 ' + r.joined + ' 处' : ''));
+      await loadNetwork(); drawAll(); renderStat(r.stats);
+      await refreshActive();
+    } catch (e) { ZX.toast(e.message, 'err'); }
+  });
+
+  $('dxfForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!active) return;
+    const file = $('dxfFile').files[0];
+    if (!file) return ZX.toast('先选 .dxf', 'err');
+    if (!confirm('用 DXF 重新生成整层路网？现有节点会被覆盖。')) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('apply_seats', $('dxfSeats').checked ? '1' : '0');
+    ZX.toast('正在解析 DXF…');
+    const res = await fetch('/api/admin/floors/' + active.id + '/network/from-dxf', { method: 'POST', body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!data.ok) return ZX.toast(data.error || '生成失败', 'err');
+    ZX.toast('节点 ' + data.nodes + ' / 连线 ' + data.edges +
+      ' · 座位候选 ' + data.seats + (data.seat_created ? '（写入 ' + data.seat_created + '）' : '') +
+      (data.joined ? ' · 接上 ' + data.joined + ' 处' : ''));
+    $('dxfFile').value = '';
+    await loadSeats();
+    await loadNetwork(); drawAll(); renderStat(data.stats);
+    await refreshActive();
+  });
+
+  $('netJoin').addEventListener('click', async () => {
+    if (!active) return;
+    try {
+      const r = await api('/api/admin/floors/' + active.id + '/network/join', { method: 'POST', body: '{}' });
+      ZX.toast(r.added.length ? '补了 ' + r.added.length + ' 条连线，连通率 ' + r.stats.connected_ratio + '%' : '本来就是连通的');
+      await loadNetwork(); drawNet(); renderStat(r.stats);
+    } catch (e) { ZX.toast(e.message, 'err'); }
+  });
+
+  $('netDiag').addEventListener('click', async () => {
+    if (!active) return;
+    try {
+      const r = await api('/api/admin/floors/' + active.id + '/network/diagnose');
+      const box = $('diagBox');
+      box.style.display = '';
+      box.innerHTML = '<b>路网诊断</b><ul style="margin:6px 0 0 18px;padding:0">' +
+        r.tips.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul>' +
+        '<div class="small muted" style="margin-top:6px">节点 ' + r.facts.nodes + ' · 连线 ' + r.facts.edges +
+        ' · 分块 ' + r.facts.components + ' · 连通率 ' + r.facts.connected_ratio + '%</div>';
+    } catch (e) { ZX.toast(e.message, 'err'); }
+  });
+
+  $('netClear').addEventListener('click', async () => {
+    if (!active || !confirm('清空这一层的路网节点和连线？')) return;
+    try {
+      await api('/api/admin/floors/' + active.id + '/network', { method: 'DELETE' });
+      nodes = []; edges = []; selNode = null; pendingLink = null;
+      drawNet(); renderInspector(); $('netStat').textContent = '座位 ' + seats.length + ' · 节点 0 · 连线 0';
+      ZX.toast('路网已清空');
+      await refreshActive();
+    } catch (e) { ZX.toast(e.message, 'err'); }
+  });
+
+  $('trApply').addEventListener('click', async () => {
+    if (!active) return;
+    const scale = Number($('trScale').value || 1);
+    const dx = Number($('trDx').value || 0);
+    const dy = Number($('trDy').value || 0);
+    if (scale === 1 && dx === 0 && dy === 0) return ZX.toast('没有要调整的量', 'err');
+    try {
+      const r = await api('/api/admin/floors/' + active.id + '/transform', {
+        method: 'POST', body: JSON.stringify({ scale, dx, dy, with_seats: $('trSeats').checked })
+      });
+      ZX.toast('座位 ' + r.moved.seats + ' · 节点 ' + r.moved.nodes);
+      $('trScale').value = 1; $('trDx').value = 0; $('trDy').value = 0;
+      await loadSeats(); await loadNetwork(); drawAll(); renderStat();
+    } catch (e) { ZX.toast(e.message, 'err'); }
+  });
+
+  async function refreshActive() {
+    const r = await api('/api/floors');
+    floors = r.floors || [];
+    active = floors.find(f => f.id === active.id) || active;
+    renderList(); setBadge();
+  }
+
+  applyView();
   loadFloors().catch(e => ZX.toast(e.message, 'err'));
 </script>
 {% endblock %}
