@@ -525,8 +525,8 @@ img.avatar{object-fit:cover;display:inline-block;border-radius:50%}
 .edit-inspector label.small{display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--muted)}
 .edit-inspector .input{width:130px;padding:5px 8px}
 
-.edit-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px}
-.edit-actions label.small{display:inline-flex;align-items:center;gap:5px;color:var(--muted);font-size:12px}
+.edit-actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:12px;padding:10px 4px 0;border-top:1px solid var(--line-2)}
+.edit-actions label.small{display:inline-flex;align-items:center;gap:7px;color:var(--muted);font-size:12px;min-width:0}.edit-actions .net-tools{padding-left:2px}
 .edit-shift{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px;
   padding:10px 12px;border:1px dashed var(--line);border-radius:10px;background:#fbfcfe}
 .edit-shift label.small{display:inline-flex;align-items:center;gap:5px;color:var(--muted);font-size:12px}

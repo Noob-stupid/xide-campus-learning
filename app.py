@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """习得 · Web 应用入口。"""
 import json
 import os
@@ -769,7 +769,7 @@ def api_admin_seat_create(fid):
     sid = db.execute('INSERT INTO seats(floor_id,code,zone,x,y,w,h,seat_type,features,status) '
                      'VALUES(?,?,?,?,?,?,?,?,?,?)',
                      (fid, code, str(d.get('zone') or '自习区')[:20], x, y,
-                      float(d.get('w') or 30), float(d.get('h') or 24),
+                      float(d.get('w') or 16), float(d.get('h') or 12),
                       str(d.get('seat_type') or 'normal'), str(d.get('features') or '')[:60], 'free'))
     return jsonify({'ok': True, 'seat': dict(db.one('SELECT * FROM seats WHERE id=?', (sid,)))})
 
@@ -1593,3 +1593,4 @@ if __name__ == '__main__':
     print(' 账号：student / reviewer / admin / teacher  密码：123456')
     print('=' * 56)
     app.run(host=HOST, port=PORT, debug=False, threaded=True)
+

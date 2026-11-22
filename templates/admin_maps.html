@@ -86,13 +86,8 @@
         <button class="btn ghost sm" id="mapDelete" type="button" style="display:none">删除底图</button>
       </div>
 
-      <div class="edit-actions">
-        <button class="btn primary sm" id="genImage" type="button">从底图生成路网</button>
-        <form id="dxfForm" class="row" style="gap:8px;align-items:center">
-          <input class="input" type="file" id="dxfFile" accept=".dxf" required>
-          <label class="small"><input type="checkbox" id="dxfSeats" checked> 同时写入座位候选</label>
-          <button class="btn soft sm" type="submit">DXF 生成</button>
-        </form>
+      <div class="edit-actions net-tools">
+        <span class="small muted">路网工具</span>
         <button class="btn ghost sm" id="netJoin" type="button">接上断开的部分</button>
         <button class="btn ghost sm" id="netDiag" type="button">诊断路网</button>
         <button class="btn ghost sm" id="netClear" type="button">清空路网</button>
@@ -321,7 +316,7 @@
       el.setAttribute('class', seatClass(s));
       el.dataset.kind = 'seat';
       el.dataset.id = s.id;
-      const sw = Math.max(8, Number(s.w) || 30), sh = Math.max(7, Number(s.h) || 24);
+      const sw = Math.max(8, Math.min(Number(s.w) || 16, 18)), sh = Math.max(7, Math.min(Number(s.h) || 12, 14));
       const r = document.createElementNS(SVGNS, 'rect');
       r.setAttribute('x', Number(s.x) - sw / 2); r.setAttribute('y', Number(s.y) - sh / 2);
       r.setAttribute('width', sw); r.setAttribute('height', sh); r.setAttribute('rx', 3);
@@ -909,41 +904,6 @@ $('mapDelete').addEventListener('click', async () => {
       const keep = active.id;
       await loadFloors(); await selectFloor(keep);
     } catch (e) { ZX.toast(e.message, 'err'); }
-  });
-
-  $('genImage').addEventListener('click', async () => {
-    if (!active) return;
-    if (!active.plan_url) return ZX.toast('先上传底图再生成', 'err');
-    if (!confirm('用底图重新生成整层路网？现有节点会被覆盖（座位不动）。')) return;
-    ZX.toast('正在识别墙线…');
-    try {
-      const r = await api('/api/admin/floors/' + active.id + '/network/generate', { method: 'POST', body: '{}' });
-      ZX.toast('生成 ' + r.nodes + ' 节点 / ' + r.edges + ' 连线' + (r.joined ? '，自动接上 ' + r.joined + ' 处' : ''));
-      await loadNetwork(); drawAll(); renderStat(r.stats);
-      await refreshActive();
-    } catch (e) { ZX.toast(e.message, 'err'); }
-  });
-
-  $('dxfForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    if (!active) return;
-    const file = $('dxfFile').files[0];
-    if (!file) return ZX.toast('先选 .dxf', 'err');
-    if (!confirm('用 DXF 重新生成整层路网？现有节点会被覆盖。')) return;
-    const fd = new FormData();
-    fd.append('file', file);
-    fd.append('apply_seats', $('dxfSeats').checked ? '1' : '0');
-    ZX.toast('正在解析 DXF…');
-    const res = await fetch('/api/admin/floors/' + active.id + '/network/from-dxf', { method: 'POST', body: fd });
-    const data = await res.json().catch(() => ({}));
-    if (!data.ok) return ZX.toast(data.error || '生成失败', 'err');
-    ZX.toast('节点 ' + data.nodes + ' / 连线 ' + data.edges +
-      ' · 座位候选 ' + data.seats + (data.seat_created ? '（写入 ' + data.seat_created + '）' : '') +
-      (data.joined ? ' · 接上 ' + data.joined + ' 处' : ''));
-    $('dxfFile').value = '';
-    await loadSeats();
-    await loadNetwork(); drawAll(); renderStat(data.stats);
-    await refreshActive();
   });
 
   $('netJoin').addEventListener('click', async () => {
